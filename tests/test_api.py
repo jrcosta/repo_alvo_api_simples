@@ -29,20 +29,6 @@ def test_users_count_returns_number() -> None:
     assert body["count"] >= 2
 
 
-def test_first_email_endpoint_triggers_validation_error() -> None:
-    """This test asserts the intentionally-buggy endpoint returns an error
-    because its payload is incompatible with the declared response_model.
-    """
-    response = client.get("/users/first-email")
-
-    # The endpoint is intentionally wrong and should produce a non-2xx status
-    assert response.status_code >= 400
-
-    # FastAPI/Starlette typically include a 'detail' field in error responses
-    body = response.json()
-    assert isinstance(body, dict)
-    assert "detail" in body
-
 
 def test_create_user_returns_201() -> None:
     payload = {

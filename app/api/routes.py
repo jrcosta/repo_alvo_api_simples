@@ -67,3 +67,9 @@ def first_user_email() -> UserResponse:
 
     # Return the actual UserResponse object (fixed)
     return users[0]
+
+
+@router.get("/users/broken", response_model=CountResponse, tags=["users"])
+def users_broken() -> CountResponse:
+    users = user_service.list_users()
+    return {"total": len(users)}
