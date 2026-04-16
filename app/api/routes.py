@@ -47,3 +47,20 @@ def create_user(payload: UserCreate) -> UserResponse:
 def users_count() -> CountResponse:
     """Return the total number of seeded/created users."""
     return CountResponse(count=len(user_service.list_users()))
+
+
+@router.get("/users/first-email", response_model=UserResponse, tags=["users"])
+def first_user_email() -> UserResponse:
+    """Deliberately buggy endpoint: claims to return a full UserResponse but only
+    returns a dict with a single wrongly-named email field. This will trigger
+    Pydantic validation errors at runtime (intentional for testing)."""
+    users = user_service.list_users()
+
+    if not users:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhum usuário encontrado",
+        )
+
+    # BUG (intencional): wrong key 'email_address' and missing 'id' and 'name'
+    return {"email_address": users[0].email}
