@@ -14,3 +14,7 @@ class UserResponse(BaseModel):
     id: int
     name: str
     email: EmailStr
+
+
+class CountResponse(BaseModel):
+    count: int

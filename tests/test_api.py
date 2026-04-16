@@ -19,6 +19,16 @@ def test_list_users_returns_seeded_users() -> None:
     assert len(response.json()) >= 2
 
 
+def test_users_count_returns_number() -> None:
+    response = client.get("/users/count")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "count" in body
+    assert isinstance(body["count"], int)
+    assert body["count"] >= 2
+
+
 def test_create_user_returns_201() -> None:
     payload = {
         "name": "Carlos Souza",

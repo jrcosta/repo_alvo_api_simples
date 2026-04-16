@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas import HealthResponse, UserCreate, UserResponse
+from app.schemas import HealthResponse, UserCreate, UserResponse, CountResponse
 from app.services.user_service import UserService
 
 router = APIRouter()
@@ -41,3 +41,9 @@ def create_user(payload: UserCreate) -> UserResponse:
         )
 
     return user_service.create_user(payload)
+
+
+@router.get("/users/count", response_model=CountResponse, tags=["users"])
+def users_count() -> CountResponse:
+    """Return the total number of seeded/created users."""
+    return CountResponse(count=len(user_service.list_users()))
