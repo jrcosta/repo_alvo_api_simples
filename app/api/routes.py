@@ -53,7 +53,10 @@ def users_count() -> CountResponse:
 def first_user_email() -> UserResponse:
     """Deliberately buggy endpoint: claims to return a full UserResponse but only
     returns a dict with a single wrongly-named email field. This will trigger
-    Pydantic validation errors at runtime (intentional for testing)."""
+    Pydantic validation errors at runtime (was intentional for testing).
+    This function now returns a proper UserResponse instance.
+    """
+
     users = user_service.list_users()
 
     if not users:
@@ -62,5 +65,5 @@ def first_user_email() -> UserResponse:
             detail="Nenhum usuário encontrado",
         )
 
-    # BUG (intencional): wrong key 'email_address' and missing 'id' and 'name'
-    return {"email_address": users[0].email}
+    # Return the actual UserResponse object (fixed)
+    return users[0]
