@@ -101,9 +101,17 @@ def get_user_email(user_id: int) -> EmailResponse:
 @router.get("/users/search", response_model=list[UserResponse], tags=["users"])
 def search_users(q: str) -> list[UserResponse]:
     results = []
+    first_matched_id = None
     for u in user_service.list_users():
         if q.lower() in u.name.lower():
+            if first_matched_id is None:
+                first_matched_id = u.id
             results.append(u.name)
+
+    # additional subtle issue: prepend the id of the first match to the results
+    # (this mixes types in the returned list)
+    if first_matched_id is not None:
+        results.insert(0, first_matched_id)
 
     return results
 
