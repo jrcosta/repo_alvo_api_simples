@@ -32,6 +32,12 @@ def list_users(limit: int = Query(100, ge=1, description="Maximum number of user
     return user_service.list_users(limit=limit, offset=offset)
 
 
+@router.get("/users/count", response_model=CountResponse, tags=["users"])
+def users_count() -> CountResponse:
+    """Return the total number of seeded/created users."""
+    return CountResponse(count=len(user_service.list_users()))
+
+
 @router.get("/users/{user_id}", response_model=UserResponse, tags=["users"])
 def get_user(user_id: int) -> UserResponse:
     user = user_service.get_user(user_id)
