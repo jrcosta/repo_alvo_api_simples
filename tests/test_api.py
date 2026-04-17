@@ -44,6 +44,19 @@ def test_users_count_returns_number() -> None:
     assert body["count"] >= 2
 
 
+def test_users_count_route_not_captured_by_id() -> None:
+    """Defensive test: ensure a static route '/users/count' is not matched by '/users/{user_id}'.
+
+    This prevents regressions where route order causes 'count' to be parsed as an int
+    and results in a 422 Unprocessable Entity.
+    """
+    response = client.get("/users/count")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data.get("count"), int)
+
+
 
 def test_create_user_returns_201() -> None:
     payload = {
