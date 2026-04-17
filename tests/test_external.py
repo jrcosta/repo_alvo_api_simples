@@ -47,3 +47,6 @@ def test_get_user_age_estimate_returns_404_for_missing_user() -> None:
     # Query a user id that does not exist (e.g. 9999)
     response = client.get("/users/9999/age-estimate")
     assert response.status_code == 404
+    body = response.json()
+    assert isinstance(body, dict)
+    assert body.get("detail") == "Usuário não encontrado"
