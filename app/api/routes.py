@@ -1,10 +1,19 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas import HealthResponse, UserCreate, UserResponse, CountResponse, EmailResponse
+from app.schemas import (
+    HealthResponse,
+    UserCreate,
+    UserResponse,
+    CountResponse,
+    EmailResponse,
+    AgeEstimateResponse,
+)
+from app.services.external_service import ExternalService
 from app.services.user_service import UserService
 
 router = APIRouter()
 user_service = UserService()
+external_service = ExternalService()
 
 
 @router.get("/health", response_model=HealthResponse, tags=["health"])
@@ -87,3 +96,17 @@ def get_user_email(user_id: int) -> EmailResponse:
         )
 
     return EmailResponse(email=user.email)
+
+
+@router.get("/users/{user_id}/age-estimate", response_model=AgeEstimateResponse, tags=["external"])
+def get_user_age_estimate(user_id: int) -> AgeEstimateResponse:
+    user = user_service.get_user(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+
+    # Use the public agify.io API to estimate age by name
+    return external_service.estimate_age(user.name)

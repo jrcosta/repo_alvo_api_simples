@@ -22,3 +22,9 @@ class CountResponse(BaseModel):
 
 class EmailResponse(BaseModel):
     email: EmailStr
+
+
+class AgeEstimateResponse(BaseModel):
+    name: str
+    age: int | None = None
+    count: int | None = None
