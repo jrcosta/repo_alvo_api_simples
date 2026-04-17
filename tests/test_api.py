@@ -114,3 +114,46 @@ def test_search_users_returns_matching_results() -> None:
         assert "id" in user
         assert "name" in user
         assert "email" in user
+
+
+def test_duplicates_returns_empty_when_no_duplicates() -> None:
+    """With only seeded users (unique emails), /users/duplicates should return an empty list."""
+    response = client.get("/users/duplicates")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_duplicates_returns_users_with_same_email() -> None:
+    """Create two users with the same email and verify they appear in /users/duplicates."""
+    email = "duplicado@example.com"
+    client.post("/users", json={"name": "Dup Um", "email": email})
+
+    # Force a second user with the same email by bypassing the uniqueness check
+    from app.api.routes import user_service
+    from app.schemas import UserResponse
+
+    forced = UserResponse(id=9999, name="Dup Dois", email=email)
+    user_service._users.append(forced)
+
+    response = client.get("/users/duplicates")
+
+    assert response.status_code == 200
+    duplicates = response.json()
+    emails = [u["email"] for u in duplicates]
+    assert email in emails
+    assert len([e for e in emails if e == email]) >= 2
+
+    # Cleanup: remove the forced user so it doesn't affect other tests
+    user_service._users = [u for u in user_service._users if u.id != 9999]
+
+
+def test_duplicates_returns_valid_user_objects() -> None:
+    """Ensure each item returned by /users/duplicates has the expected UserResponse fields."""
+    response = client.get("/users/duplicates")
+
+    assert response.status_code == 200
+    for user in response.json():
+        assert "id" in user
+        assert "name" in user
+        assert "email" in user
