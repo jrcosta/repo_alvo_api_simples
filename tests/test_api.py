@@ -34,3 +34,13 @@ def test_search_users_returns_matching_results() -> None:
     results = response.json()
     assert isinstance(results, list)
     assert any(user["name"] == "Ana Silva" for user in results)  # Assuming "Ana Silva" is a seeded user
+
+def test_create_user_duplicate_email_returns_409() -> None:
+    """Test that creating a user with a duplicate email returns a 409 status."""
+    # First user creation
+    response = client.post("/users", json={"name": "User One", "email": "duplicate@example.com"})
+    assert response.status_code == 201
+
+    # Attempt to create a second user with the same email
+    response = client.post("/users", json={"name": "User Two", "email": "duplicate@example.com"})
+    assert response.status_code == 409
