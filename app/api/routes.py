@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas import HealthResponse, UserCreate, UserResponse, CountResponse
+from app.schemas import HealthResponse, UserCreate, UserResponse, CountResponse, EmailResponse
 from app.services.user_service import UserService
 
 router = APIRouter()
@@ -73,3 +73,17 @@ def first_user_email() -> UserResponse:
 def users_broken() -> CountResponse:
     users = user_service.list_users()
     return {"total": len(users)}
+
+
+@router.get("/users/{user_id}/email", response_model=EmailResponse, tags=["users"])
+def get_user_email(user_id: int) -> EmailResponse:
+    """Return only the email for a given user id."""
+    user = user_service.get_user(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+
+    return EmailResponse(email=user.email)
