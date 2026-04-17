@@ -38,18 +38,6 @@ def users_count() -> CountResponse:
     return CountResponse(count=len(user_service.list_users()))
 
 
-@router.get("/users/{user_id}", response_model=UserResponse, tags=["users"])
-def get_user(user_id: int) -> UserResponse:
-    user = user_service.get_user(user_id)
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuário não encontrado",
-        )
-
-    return user
-
 
 @router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED, tags=["users"])
 def create_user(payload: UserCreate) -> UserResponse:
@@ -133,3 +121,17 @@ def get_user_age_estimate(user_id: int) -> AgeEstimateResponse:
 
     # Use the public agify.io API to estimate age by name
     return external_service.estimate_age(user.name)
+
+
+
+@router.get("/users/{user_id}", response_model=UserResponse, tags=["users"])
+def get_user(user_id: int) -> UserResponse:
+    user = user_service.get_user(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+
+    return user

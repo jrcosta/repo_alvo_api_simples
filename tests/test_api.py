@@ -93,3 +93,24 @@ def test_get_user_email_returns_email() -> None:
     assert "email" in body
     assert isinstance(body["email"], str)
     assert body["email"] == "ana@example.com"
+
+
+def test_search_users_returns_matching_results() -> None:
+    """Search for a known substring and ensure the response contains matching users.
+
+    This guards the `/users/search` endpoint and ensures it returns `UserResponse`-like
+    objects (id, name, email) for matching users.
+    """
+    response = client.get("/users/search?q=Ana")
+
+    assert response.status_code == 200
+    results = response.json()
+    # Expect at least one match for 'Ana' (seeded user Ana Silva)
+    assert isinstance(results, list)
+    assert any("Ana" in user.get("name", "") for user in results)
+    # Check that returned objects include required fields
+    if results:
+        user = results[0]
+        assert "id" in user
+        assert "name" in user
+        assert "email" in user
