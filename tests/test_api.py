@@ -55,3 +55,13 @@ def test_create_user_duplicate_email_returns_409() -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"] == "E-mail já cadastrado"
+
+
+def test_get_user_email_returns_email() -> None:
+    response = client.get("/users/1/email")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "email" in body
+    assert isinstance(body["email"], str)
+    assert body["email"] == "ana@example.com"
