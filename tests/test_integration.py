@@ -13,7 +13,7 @@ def test_root_endpoint_integration() -> None:
 
     # Verifica se o conteúdo esperado está presente no index.html
     # Normaliza quebras de linha para lidar com arquivos CRLF ou LF
-    with open(STATIC_DIR / "index.html") as f:
+    with open(STATIC_DIR / "index.html", encoding="utf-8") as f:
         expected_content = f.read()
     assert expected_content.replace("\r\n", "\n") in response.text.replace("\r\n", "\n")
 

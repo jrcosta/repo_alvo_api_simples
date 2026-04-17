@@ -1,84 +1,65 @@
 # Repo Alvo API Simples
 
-API pequena em **FastAPI** criada para servir como repositório-alvo em testes do QAgent.
+API REST em **FastAPI** criada para servir como repositório-alvo em testes com agentes de IA para QA e revisão técnica.
 
-## O que tem aqui
-
-- endpoint de healthcheck
-- listagem de usuários
-- consulta de usuário por id
-- criação de usuário com validação e conflito de e-mail
-- testes automatizados com pytest
-
-## Estrutura
-
-```text
-app/
-├─ api/
-│  └─ routes.py
-├─ services/
-│  └─ user_service.py
-├─ main.py
-└─ schemas.py
-
-tests/
-└─ test_api.py
-```
-
-## Instalação
+## Início Rápido
 
 ```bash
+# Clonar e instalar
+git clone https://github.com/jrcosta/repo_alvo_api_simples.git
+cd repo_alvo_api_simples
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate        # Linux/macOS
+# .venv\Scripts\Activate.ps1     # Windows PowerShell
 pip install -r requirements.txt
-```
 
-No Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-## Rodando a API
-
-```bash
+# Rodar a API
 uvicorn app.main:app --reload
+
+# Rodar os testes
+pytest -q
 ```
 
-A documentação estará em:
+Acesse:
 
-- `/docs`
-- `/redoc`
-
-## Rodando os testes
-
-```bash
-pytest
-```
+| URL | Descrição |
+|---|---|
+| http://localhost:8000 | Frontend |
+| http://localhost:8000/docs | Swagger (documentação interativa) |
+| http://localhost:8000/redoc | ReDoc |
 
 ## Endpoints
 
-- `GET /health`
-- `GET /users`
-- `GET /users/{user_id}`
-- `POST /users`
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/health` | Healthcheck |
+| `GET` | `/users` | Listar usuários (com paginação) |
+| `GET` | `/users/count` | Total de usuários |
+| `GET` | `/users/search?q=` | Buscar por nome |
+| `GET` | `/users/duplicates` | Encontrar emails duplicados |
+| `GET` | `/users/{id}` | Buscar por ID |
+| `GET` | `/users/{id}/email` | Email de um usuário |
+| `GET` | `/users/{id}/age-estimate` | Estimativa de idade (agify.io) |
+| `POST` | `/users` | Criar usuário |
 
-### Exemplo de payload
+## 📚 Documentação
 
-```json
-{
-  "name": "Carlos Souza",
-  "email": "carlos@example.com"
-}
-```
+| Documento | Conteúdo |
+|---|---|
+| [Arquitetura](docs/arquitetura.md) | Estrutura de pastas, camadas, decisões de design |
+| [Endpoints](docs/endpoints.md) | Referência completa da API com exemplos |
+| [Testes](docs/testes.md) | Como rodar, lista de testes, cobertura |
+| [Frontend](docs/frontend.md) | Interface web e como funciona |
+| [CI/CD](docs/ci.md) | GitHub Actions e pipeline de testes |
+| [Integração Externa](docs/integracao-externa.md) | API agify.io, tratamento de erros, limitações |
 
 ## Objetivo
 
 Este repositório existe para:
 
-- servir como alvo de análise automatizada
-- testar workflows com GitHub Actions
-- validar geração de relatórios do agente
-- permitir mudanças controladas para exercitar cenários de QA
+- Servir como alvo de análise automatizada por agentes de IA
+- Testar workflows com GitHub Actions
+- Validar geração de relatórios de QA
+- Permitir mudanças controladas para exercitar cenários de revisão
+
+As diretrizes para agentes estão descritas em [`AGENTS.md`](AGENTS.md).
