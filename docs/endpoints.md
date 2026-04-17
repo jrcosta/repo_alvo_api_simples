@@ -1,6 +1,6 @@
 # Endpoints da API
 
-Todos os endpoints estão definidos em `app/api/routes.py`. A documentação interativa (Swagger) está disponível em `/docs` ao rodar o servidor.
+Todos os endpoints estão definidos em `python-api/app/api/routes.py`. A documentação interativa (Swagger) está disponível em `/docs` ao rodar o servidor.
 
 ---
 
