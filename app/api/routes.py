@@ -98,6 +98,16 @@ def get_user_email(user_id: int) -> EmailResponse:
     return EmailResponse(email=user.email)
 
 
+@router.get("/users/search", response_model=list[UserResponse], tags=["users"])
+def search_users(q: str) -> list[UserResponse]:
+    results = []
+    for u in user_service.list_users():
+        if q.lower() in u.name.lower():
+            results.append(u.name)
+
+    return results
+
+
 @router.get("/users/{user_id}/age-estimate", response_model=AgeEstimateResponse, tags=["external"])
 def get_user_age_estimate(user_id: int) -> AgeEstimateResponse:
     user = user_service.get_user(user_id)
