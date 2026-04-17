@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Query
 
 from app.schemas import (
     HealthResponse,
@@ -22,8 +22,14 @@ def healthcheck() -> HealthResponse:
 
 
 @router.get("/users", response_model=list[UserResponse], tags=["users"])
-def list_users() -> list[UserResponse]:
-    return user_service.list_users()
+def list_users(limit: int = Query(100, ge=1, description="Maximum number of users to return"),
+               offset: int = Query(0, ge=0, description="Number of users to skip")) -> list[UserResponse]:
+    """List users with simple pagination (limit/offset).
+
+    This endpoint accepts `limit` and `offset` query parameters and returns a
+    slice of the user list. It delegates slicing to the service layer.
+    """
+    return user_service.list_users(limit=limit, offset=offset)
 
 
 @router.get("/users/{user_id}", response_model=UserResponse, tags=["users"])

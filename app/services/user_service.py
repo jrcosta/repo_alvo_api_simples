@@ -9,8 +9,19 @@ class UserService:
         ]
         self._next_id = 3
 
-    def list_users(self) -> list[UserResponse]:
-        return self._users
+    def list_users(self, limit: int | None = None, offset: int = 0) -> list[UserResponse]:
+        """Return a slice of users. `limit` and `offset` implement simple pagination.
+
+        - limit: maximum number of users to return (None means no limit)
+        - offset: number of users to skip from the start
+        """
+        if offset < 0:
+            offset = 0
+
+        if limit is None:
+            return self._users[offset:]
+
+        return self._users[offset: offset + limit]
 
     def get_user(self, user_id: int) -> UserResponse | None:
         for user in self._users:

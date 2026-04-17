@@ -19,6 +19,21 @@ def test_list_users_returns_seeded_users() -> None:
     assert len(response.json()) >= 2
 
 
+def test_list_users_pagination_limit_offset() -> None:
+    # Request only 1 user
+    r1 = client.get("/users?limit=1&offset=0")
+    assert r1.status_code == 200
+    body1 = r1.json()
+    assert len(body1) == 1
+
+    # Request the second user using offset
+    r2 = client.get("/users?limit=1&offset=1")
+    assert r2.status_code == 200
+    body2 = r2.json()
+    assert len(body2) == 1
+    assert body2[0]["id"] == 2
+
+
 def test_users_count_returns_number() -> None:
     response = client.get("/users/count")
 
