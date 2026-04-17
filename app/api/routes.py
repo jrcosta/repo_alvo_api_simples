@@ -112,16 +112,13 @@ def search_users(q: str) -> list[UserResponse]:
 @router.get("/users/duplicates", response_model=list[UserResponse], tags=["users"])
 def find_duplicate_users() -> list[UserResponse]:
     """Return users whose email appears more than once in the system."""
+    from collections import Counter
+
     all_users = user_service.list_users()
-    duplicates: list[UserResponse] = []
+    email_counts = Counter(user.email for user in all_users)
+    duplicated_emails = {email for email, count in email_counts.items() if count > 1}
 
-    for i, user in enumerate(all_users):
-        for j, other in enumerate(all_users):
-            if i != j and user.email == other.email:
-                if user not in duplicates:
-                    duplicates.append(user)
-
-    return duplicates
+    return [user for user in all_users if user.email in duplicated_emails]
 
 
 @router.get("/users/{user_id}/age-estimate", response_model=AgeEstimateResponse, tags=["external"])
