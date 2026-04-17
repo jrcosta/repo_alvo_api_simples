@@ -109,6 +109,21 @@ def search_users(q: str) -> list[UserResponse]:
     return results
 
 
+@router.get("/users/duplicates", response_model=list[UserResponse], tags=["users"])
+def find_duplicate_users() -> list[UserResponse]:
+    """Return users whose email appears more than once in the system."""
+    all_users = user_service.list_users()
+    duplicates: list[UserResponse] = []
+
+    for i, user in enumerate(all_users):
+        for j, other in enumerate(all_users):
+            if i != j and user.email == other.email:
+                if user not in duplicates:
+                    duplicates.append(user)
+
+    return duplicates
+
+
 @router.get("/users/{user_id}/age-estimate", response_model=AgeEstimateResponse, tags=["external"])
 def get_user_age_estimate(user_id: int) -> AgeEstimateResponse:
     user = user_service.get_user(user_id)
