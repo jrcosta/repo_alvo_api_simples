@@ -18,7 +18,6 @@ def test_root_endpoint_integration() -> None:
     assert expected_content.replace("\r\n", "\n") in response.text.replace("\r\n", "\n")
 
 def test_access_static_file_integration() -> None:
-    # O único arquivo estático presente é index.html
     response = client.get("/static/index.html")
     assert response.status_code == 200
     assert "html" in response.headers["content-type"]
@@ -26,3 +25,24 @@ def test_access_static_file_integration() -> None:
 def test_access_nonexistent_static_file_returns_404_integration() -> None:
     response = client.get("/static/nonexistentfile.js")
     assert response.status_code == 404
+
+def test_create_user_integration() -> None:
+    """Test the full cycle of creating a user."""
+    response = client.post("/users", json={"name": "New User", "email": "newuser@example.com"})
+    assert response.status_code == 201
+
+    # Verify the user is created
+    response = client.get("/users")
+    assert response.status_code == 200
+    users = response.json()
+    assert any(user["email"] == "newuser@example.com" for user in users)
+
+def test_create_user_duplicate_email_integration() -> None:
+    """Test that creating a user with a duplicate email returns a 409 status."""
+    # Create the first user
+    response = client.post("/users", json={"name": "User One", "email": "duplicate@example.com"})
+    assert response.status_code == 201
+
+    # Attempt to create a second user with the same email
+    response = client.post("/users", json={"name": "User Two", "email": "duplicate@example.com"})
+    assert response.status_code == 409
