@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+java-api/target/
+.vscode/
