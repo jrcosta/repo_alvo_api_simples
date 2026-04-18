@@ -111,6 +111,16 @@ public class UserController {
                 .toList();
     }
 
+    @GetMapping("/users/email-domains")
+    public Map<String, Long> usersByEmailDomain() {
+        return userService.listAllUsers()
+                .stream()
+                .map(UserResponse::email)
+                .filter(email -> email.contains("@"))
+                .map(email -> email.substring(email.indexOf('@') + 1).toLowerCase())
+                .collect(Collectors.groupingBy(domain -> domain, Collectors.counting()));
+    }
+
     @GetMapping("/users/{userId}/age-estimate")
     public AgeEstimateResponse getUserAgeEstimate(@PathVariable int userId) {
         UserResponse user = userService.getById(userId)

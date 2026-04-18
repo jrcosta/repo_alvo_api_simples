@@ -70,6 +70,20 @@ Retorna usuários cujo e-mail aparece mais de uma vez no sistema.
 
 ---
 
+### `GET /users/email-domains` *(Java API)*
+
+Retorna a contagem de usuários por domínio de e-mail.
+
+**Response** `200`:
+```json
+{
+  "example.com": 2,
+  "empresa.com": 1
+}
+```
+
+---
+
 ### `GET /users/{user_id}`
 
 Retorna um usuário pelo ID.

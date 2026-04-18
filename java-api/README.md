@@ -23,6 +23,7 @@ A API sobe em `http://localhost:8080` por padrão.
   - `GET /users/count`
   - `GET /users/search?q=...`
   - `GET /users/duplicates`
+  - `GET /users/email-domains`
   - `GET /users/{id}`
   - `GET /users/{id}/email`
   - `GET /users/{id}/age-estimate`
