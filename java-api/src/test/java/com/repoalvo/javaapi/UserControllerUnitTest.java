@@ -2,15 +2,14 @@ package com.repoalvo.javaapi;
 
 import com.repoalvo.javaapi.controller.UserController;
 import com.repoalvo.javaapi.model.UserExistsResponse;
+import com.repoalvo.javaapi.model.UserResponse;
+import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
 
@@ -23,6 +22,9 @@ class UserControllerUnitTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private ExternalService externalService;
+
     @InjectMocks
     private UserController userController;
 
@@ -34,14 +36,13 @@ class UserControllerUnitTest {
     @Test
     void userExistsShouldReturnTrueWhenUserExists() {
         int userId = 1;
-        when(userService.getById(userId)).thenReturn(Optional.of(mock(Object.class)));
+        UserResponse user = new UserResponse(userId, "Ana Silva", "ana@example.com");
+        when(userService.getById(userId)).thenReturn(Optional.of(user));
 
-        ResponseEntity<UserExistsResponse> response = userController.userExists(userId);
+        UserExistsResponse response = userController.userExists(userId);
 
         assertThat(response).isNotNull();
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().isExists()).isTrue();
+        assertThat(response.exists()).isTrue();
 
         verify(userService, times(1)).getById(userId);
     }
@@ -51,12 +52,10 @@ class UserControllerUnitTest {
         int userId = 999;
         when(userService.getById(userId)).thenReturn(Optional.empty());
 
-        ResponseEntity<UserExistsResponse> response = userController.userExists(userId);
+        UserExistsResponse response = userController.userExists(userId);
 
         assertThat(response).isNotNull();
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().isExists()).isFalse();
+        assertThat(response.exists()).isFalse();
 
         verify(userService, times(1)).getById(userId);
     }
@@ -74,18 +73,14 @@ class UserControllerUnitTest {
     }
 
     @Test
-    void userExistsShouldHandleInvalidIdGracefully() {
-        // Since the controller method receives int userId, invalid strings are rejected by Spring before reaching controller.
-        // But negative or zero IDs are accepted as int, so test behavior with negative ID.
+    void userExistsShouldReturnFalseForNegativeId() {
         int invalidUserId = -1;
         when(userService.getById(invalidUserId)).thenReturn(Optional.empty());
 
-        ResponseEntity<UserExistsResponse> response = userController.userExists(invalidUserId);
+        UserExistsResponse response = userController.userExists(invalidUserId);
 
         assertThat(response).isNotNull();
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().isExists()).isFalse();
+        assertThat(response.exists()).isFalse();
 
         verify(userService, times(1)).getById(invalidUserId);
     }
