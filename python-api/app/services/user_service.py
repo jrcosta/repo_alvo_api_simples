@@ -44,3 +44,11 @@ class UserService:
         self._users.append(user)
         self._next_id += 1
         return user
+
+    def reset(self) -> None:
+        """Reinitialise the service to its original seeded state. Intended for use in tests."""
+        self._users = [
+            UserResponse(id=1, name="Ana Silva", email="ana@example.com"),
+            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com"),
+        ]
+        self._next_id = 3
