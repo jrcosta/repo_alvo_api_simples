@@ -93,4 +93,15 @@ class UserControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("ana@example.com"));
     }
+
+    @Test
+    void userExistsEndpointShouldReturnTrueAndFalse() throws Exception {
+        mockMvc.perform(get("/users/1/exists"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exists").value(true));
+
+        mockMvc.perform(get("/users/999/exists"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exists").value(false));
+    }
 }

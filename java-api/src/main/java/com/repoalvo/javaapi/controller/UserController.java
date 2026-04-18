@@ -5,6 +5,7 @@ import com.repoalvo.javaapi.model.CountResponse;
 import com.repoalvo.javaapi.model.EmailResponse;
 import com.repoalvo.javaapi.model.HealthResponse;
 import com.repoalvo.javaapi.model.UserCreateRequest;
+import com.repoalvo.javaapi.model.UserExistsResponse;
 import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
@@ -89,6 +90,11 @@ public class UserController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
 
         return new EmailResponse(user.email());
+    }
+
+    @GetMapping("/users/{userId}/exists")
+    public UserExistsResponse userExists(@PathVariable int userId) {
+        return new UserExistsResponse(userService.getById(userId).isPresent());
     }
 
     @GetMapping("/users/search")
