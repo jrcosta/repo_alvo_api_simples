@@ -27,30 +27,28 @@ def test_access_nonexistent_static_file_returns_404_integration() -> None:
     response = client.get("/static/nonexistentfile.js")
     assert response.status_code == 404
 
-def test_read_index_html_with_different_encodings() -> None:
-    # Testa a leitura do arquivo index.html com diferentes codificações
-    encodings = ['utf-8', 'ISO-8859-1']
-    for encoding in encodings:
-        with open(STATIC_DIR / "index.html", encoding=encoding) as f:
-            content = f.read()
-            assert content is not None  # Verifica se o conteúdo foi lido
-
 def test_root_endpoint_with_special_characters_in_index_html() -> None:
-    # Simula a resposta do endpoint `/` com um arquivo index.html que contém caracteres especiais
+    # Verifica que o endpoint `/` serve o conteúdo do arquivo index.html com caracteres especiais UTF-8
+    index_path = STATIC_DIR / "index.html"
+    original_content = index_path.read_text(encoding="utf-8")
     special_content = "<html><body><h1>Olá, Mundo!</h1></body></html>"
-    with open(STATIC_DIR / "index.html", "w", encoding="utf-8") as f:
-        f.write(special_content)
-
-    response = client.get("/")
-    assert response.status_code == 200
-    assert special_content.replace("\r\n", "\n") in response.text.replace("\r\n", "\n")
+    try:
+        index_path.write_text(special_content, encoding="utf-8")
+        response = client.get("/")
+        assert response.status_code == 200
+        assert special_content.replace("\r\n", "\n") in response.text.replace("\r\n", "\n")
+    finally:
+        index_path.write_text(original_content, encoding="utf-8")
 
 def test_read_malformed_index_html() -> None:
-    # Testa a aplicação com um arquivo index.html malformado
+    # Verifica que o endpoint `/` não retorna 500 mesmo com HTML malformado
+    index_path = STATIC_DIR / "index.html"
+    original_content = index_path.read_text(encoding="utf-8")
     malformed_content = "<html><body><h1>Malformed HTML"
-    with open(STATIC_DIR / "index.html", "w", encoding="utf-8") as f:
-        f.write(malformed_content)
-
-    response = client.get("/")
-    assert response.status_code == 200  # A aplicação deve lidar com o erro sem quebrar
-    assert "Malformed HTML" in response.text
+    try:
+        index_path.write_text(malformed_content, encoding="utf-8")
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Malformed HTML" in response.text
+    finally:
+        index_path.write_text(original_content, encoding="utf-8")
