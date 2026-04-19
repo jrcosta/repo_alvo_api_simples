@@ -92,6 +92,12 @@ public class UserController {
         return new EmailResponse(user.email());
     }
 
+    @GetMapping("/users/by-email")
+    public UserResponse getUserByEmail(@RequestParam String email) {
+        return userService.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
+    }
+
     @GetMapping("/users/{userId}/exists")
     public UserExistsResponse userExists(@PathVariable int userId) {
         return new UserExistsResponse(userService.getById(userId).isPresent());
