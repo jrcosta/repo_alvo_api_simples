@@ -1,0 +1,32 @@
+name: Forward PR comment to qagent
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  forward:
+    if: >-
+      github.event.issue.pull_request != null &&
+      (contains(github.event.comment.body, 'Copilot') || contains(github.event.comment.body, 'copilot'))
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Forward to qagent via repository_dispatch
+        env:
+          QAGENT_PAT: ${{ secrets.QAGENT_DISPATCH_PAT }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg body "${{ github.event.comment.body }}" \
+            --arg author "${{ github.event.comment.user.login }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg pr_number "${{ github.event.issue.number }}" \
+            '{comment_body:$body,author:$author,repo:$repo,pr_number:$pr_number}')
+
+          curl -sf -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $QAGENT_PAT" \
+            "https://api.github.com/repos/jrcosta/qagent/dispatches" \
+            -d "{\"event_type\":\"pr_comment_created\",\"client_payload\":$PAYLOAD}"
+
+          echo "✅ Forwarded comment to qagent"
