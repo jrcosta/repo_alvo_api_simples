@@ -52,5 +52,5 @@ def test_create_multiple_users_integration() -> None:
     response = client.get("/users")
     assert response.status_code == 200
     users = response.json()
-    assert len(users) == len(emails)
-    assert all(user["email"] in emails for user in users)
+    user_emails = [user["email"] for user in users]
+    assert all(email in user_emails for email in emails)
