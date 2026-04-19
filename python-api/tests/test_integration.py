@@ -32,9 +32,10 @@ def test_full_user_lifecycle():
     # Search users by name
     search_resp = client.get("/users/search", params={"q": "Integration"})
     assert search_resp.status_code == 200
-    # The response is HTML table, so check content-type and presence of user name
-    assert "text/html" in search_resp.headers["content-type"]
-    assert create_payload["name"] in search_resp.text
+    assert "application/json" in search_resp.headers["content-type"]
+    search_data = search_resp.json()
+    assert isinstance(search_data, list)
+    assert any(u["name"] == create_payload["name"] for u in search_data)
 
     # Count users
     count_resp = client.get("/users/count")
