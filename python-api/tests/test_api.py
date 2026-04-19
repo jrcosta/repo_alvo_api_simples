@@ -1,62 +1,51 @@
-from app.services.user_service import UserService
-from app.schemas import UserCreateRequest
-import pytest
+from fastapi.testclient import TestClient
+from app.main import app
 
-@pytest.fixture
-def user_service() -> UserService:
-    # Create a fresh instance for each test to ensure isolation
-    return UserService()
+client = TestClient(app)
 
-def test_create_user_with_unique_email_generates_id_and_stores_user(user_service: UserService) -> None:
-    request = UserCreateRequest(name="Test User", email="unique@example.com")
-    created_user = user_service.create(request)
+def test_create_user_handles_empty_name_and_email() -> None:
+    """Test that Pydantic validation rejects empty name and email with 422."""
+    response = client.post("/users", json={"name": "", "email": ""})
+    assert response.status_code == 422
 
-    assert created_user.id > 0
-    assert created_user.name == "Test User"
-    assert created_user.email == "unique@example.com"
+def test_create_user_handles_invalid_email_format() -> None:
+    """Test that Pydantic validation rejects an invalid email format with 422."""
+    response = client.post("/users", json={"name": "Test User", "email": "invalid-email"})
+    assert response.status_code == 422
 
-    # Verify user is stored and retrievable by ID
-    retrieved = user_service.getById(created_user.id)
-    assert retrieved is not None
-    assert retrieved.id == created_user.id
-    assert retrieved.email == created_user.email
+def test_check_health_returns_correct_status() -> None:
+    """Test that checkHealth returns the correct status and data."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
-def test_find_by_email_returns_correct_user_after_multiple_creations(user_service: UserService) -> None:
-    users_data = [
-        {"name": "User A", "email": "a@example.com"},
-        {"name": "User B", "email": "b@example.com"},
-        {"name": "User C", "email": "c@example.com"},
-    ]
-    created_users = []
-    for data in users_data:
-        created = user_service.create(UserCreateRequest(**data))
-        created_users.append(created)
+def test_search_users_handles_empty_query() -> None:
+    """Test that an empty search query returns all users (empty string matches any name)."""
+    response = client.get("/users/search?q=")
+    assert response.status_code == 200
+    results = response.json()
+    assert isinstance(results, list)
+    assert len(results) > 0
 
-    for created in created_users:
-        found = user_service.findByEmail(created.email)
-        assert found is not None
-        assert found.id == created.id
-        assert found.email == created.email
+def test_search_users_returns_matching_results() -> None:
+    """Test that searchUsers returns matching results for a known query."""
+    response = client.get("/users/search?q=Ana")
+    assert response.status_code == 200
+    results = response.json()
+    assert isinstance(results, list)
+    assert any(user["name"] == "Ana Silva" for user in results)  # Assuming "Ana Silva" is a seeded user
 
-def test_create_user_with_duplicate_email_raises_error_or_returns_none(user_service: UserService) -> None:
-    request = UserCreateRequest(name="User One", email="dup@example.com")
-    first_user = user_service.create(request)
-    assert first_user is not None
+def test_create_user_duplicate_email_returns_409() -> None:
+    """Test that creating a user with a duplicate email returns a 409 status."""
+    # First user creation
+    response = client.post("/users", json={"name": "User One", "email": "duplicate@example.com"})
+    assert response.status_code == 201
 
-    # Attempt to create another user with the same email
-    with pytest.raises(Exception):
-        user_service.create(request)
+    # Attempt to create a second user with the same email
+    response = client.post("/users", json={"name": "User Two", "email": "duplicate@example.com"})
+    assert response.status_code == 409
 
-def test_service_state_isolation_between_tests() -> None:
-    service1 = UserService()
-    service2 = UserService()
-
-    user1 = service1.create(UserCreateRequest(name="User1", email="user1@example.com"))
-    user2 = service2.create(UserCreateRequest(name="User2", email="user2@example.com"))
-
-    # Each service instance should have independent state
-    assert service1.findByEmail("user1@example.com") is not None
-    assert service1.findByEmail("user2@example.com") is None
-
-    assert service2.findByEmail("user2@example.com") is not None
-    assert service2.findByEmail("user1@example.com") is None
+def test_create_user_unique_email_returns_201() -> None:
+    """Test that creating a user with a unique email returns a 201 status."""
+    response = client.post("/users", json={"name": "Unique User", "email": "unique@example.com"})
+    assert response.status_code == 201

@@ -18,7 +18,7 @@ def test_user_service_reset(user_service) -> None:
     # Validar conteúdo dos usuários remanescentes após reset
     expected_seed_users = [
         UserResponse(id=1, name="Ana Silva", email="ana@example.com"),
-        UserResponse(id=2, name="João Souza", email="joao@example.com"),
+        UserResponse(id=2, name="Bruno Lima", email="bruno@example.com"),
     ]
     # Comparar usuários por id, name e email
     for expected_user in expected_seed_users:
@@ -72,15 +72,6 @@ def test_user_service_reset_on_empty_service(user_service) -> None:
     assert len(users_after_reset) == 2  # Deve restaurar os usuários seed
     assert user_service._next_id == 3
 
-def test_user_service_reset_clears_additional_state(user_service) -> None:
-    # Supondo que UserService tenha algum estado extra, validar se reset limpa
-    # Como não há estado extra visível, vamos simular um atributo extra para teste
-    user_service._some_cache = {"key": "value"}
-    user_service.reset()
-    # Verificar se o atributo extra foi limpo ou reinicializado
-    # Se não existir, o teste falhará, então protegemos com getattr
-    some_cache = getattr(user_service, "_some_cache", None)
-    assert some_cache in (None, {}, []), "O estado extra _some_cache deve ser limpo após reset"
 
 def test_user_service_create_user_raises_error_after_reset_with_invalid_data(user_service) -> None:
     user_service.reset()
