@@ -78,4 +78,54 @@ class UserControllerTest {
         assertFalse(response.exists(), "exists should be false for negative userId if user not found");
         verify(userService, times(1)).getById(userId);
     }
+
+    @Test
+    @DisplayName("userExists propagates unexpected exceptions thrown by userService.getById")
+    void userExistsPropagatesUnexpectedException() {
+        int userId = 5;
+        when(userService.getById(userId)).thenThrow(new RuntimeException("Unexpected error"));
+
+        RuntimeException thrown = assertThrows(RuntimeException.class, () -> userController.userExists(userId));
+        assertEquals("Unexpected error", thrown.getMessage());
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists returns exists=false for Integer.MAX_VALUE when user not found")
+    void userExistsReturnsFalseForMaxIntegerUserId() {
+        int userId = Integer.MAX_VALUE;
+        when(userService.getById(userId)).thenReturn(Optional.empty());
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        assertFalse(response.exists(), "exists should be false for Integer.MAX_VALUE if user not found");
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists returns exists=false for Integer.MIN_VALUE when user not found")
+    void userExistsReturnsFalseForMinIntegerUserId() {
+        int userId = Integer.MIN_VALUE;
+        when(userService.getById(userId)).thenReturn(Optional.empty());
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        assertFalse(response.exists(), "exists should be false for Integer.MIN_VALUE if user not found");
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists does not interact with externalService")
+    void userExistsDoesNotCallExternalService() {
+        int userId = 1;
+        UserResponse user = new UserResponse(userId, "Test User", "test@example.com");
+        when(userService.getById(userId)).thenReturn(Optional.of(user));
+
+        userController.userExists(userId);
+
+        verify(userService, times(1)).getById(userId);
+        verifyNoInteractions(externalService);
+    }
 }
