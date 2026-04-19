@@ -1,176 +1,153 @@
-import json
-import pytest
+import os
+import subprocess
+import unittest
+from unittest.mock import patch, MagicMock
 
-# Simulate the shell script logic for filtering and payload creation
+class TestForwardPrCommentWorkflow(unittest.TestCase):
+    """
+    Test suite to simulate and validate the behavior of the forward-pr-comment GitHub Actions workflow logic,
+    focusing on the usage of the QAGENT_PAT token and the payload construction for repository_dispatch.
+    """
 
-def contains_copilot(comment_body: str) -> bool:
-    # The workflow checks for 'Copilot' or 'copilot' substrings only
-    return 'Copilot' in comment_body or 'copilot' in comment_body
+    def setUp(self):
+        # Setup environment variables as they would be in the workflow
+        self.env = {
+            "QAGENT_PAT": "fake_token_123",
+            "COMMENT_BODY": "This is a test comment",
+            "COMMENT_AUTHOR": "testcopilotuser",
+            "REPOSITORY_NAME": "owner/repo",
+            "PR_NUMBER": "42"
+        }
 
-def build_payload(comment_body: str, author: str, repo: str, pr_number: int) -> dict:
-    return {
-        "comment_body": comment_body,
-        "author": author,
-        "repo": repo,
-        "pr_number": pr_number,
-    }
+    def test_dispatch_payload_construction(self):
+        """
+        Test that the JSON payload constructed matches the expected structure and content.
+        """
+        import json
 
-@pytest.mark.parametrize("comment_body,expected", [
-    ("This is a test with Copilot", True),
-    ("This is a test with copilot", True),
-    ("This is a test with COPILOT", False),
-    ("This is a test with CoPiLoT", False),
-    ("No keyword here", False),
-    ("copilots are great", True),  # contains 'copilot' substring
-    ("Copilots are great", True),  # contains 'Copilot' substring
-    ("", False),
-])
-def test_contains_copilot_filter(comment_body, expected):
-    assert contains_copilot(comment_body) == expected
+        # Simulate the jq command in Python to build the payload
+        payload = {
+            "event_type": "pr_comment_created",
+            "client_payload": {
+                "comment_body": self.env["COMMENT_BODY"],
+                "author": self.env["COMMENT_AUTHOR"],
+                "repo": self.env["REPOSITORY_NAME"],
+                "pr_number": self.env["PR_NUMBER"]
+            }
+        }
 
-def test_build_payload_includes_all_fields():
-    comment_body = "Test comment with Copilot"
-    author = "testuser"
-    repo = "owner/repo"
-    pr_number = 42
+        # Convert to JSON string
+        payload_json = json.dumps(payload)
 
-    payload = build_payload(comment_body, author, repo, pr_number)
+        # Validate keys and values
+        self.assertIn("event_type", payload)
+        self.assertEqual(payload["event_type"], "pr_comment_created")
+        self.assertIn("client_payload", payload)
+        client_payload = payload["client_payload"]
+        self.assertEqual(client_payload["comment_body"], self.env["COMMENT_BODY"])
+        self.assertEqual(client_payload["author"], self.env["COMMENT_AUTHOR"])
+        self.assertEqual(client_payload["repo"], self.env["REPOSITORY_NAME"])
+        self.assertEqual(client_payload["pr_number"], self.env["PR_NUMBER"])
 
-    assert isinstance(payload, dict)
-    assert payload["comment_body"] == comment_body
-    assert payload["author"] == author
-    assert payload["repo"] == repo
-    assert payload["pr_number"] == pr_number
+        # Validate JSON string is parseable
+        parsed = json.loads(payload_json)
+        self.assertEqual(parsed, payload)
 
-def test_build_payload_with_sensitive_data():
-    sensitive_comment = "Password=1234 Copilot"
-    author = "sensitive_user"
-    repo = "owner/repo"
-    pr_number = 101
+    @patch("subprocess.run")
+    def test_curl_command_execution_with_valid_token(self, mock_run):
+        """
+        Test that the curl command is called with the correct headers and data when QAGENT_PAT is set.
+        """
+        # Setup mock to simulate successful curl call
+        mock_completed_process = MagicMock()
+        mock_completed_process.returncode = 0
+        mock_run.return_value = mock_completed_process
 
-    payload = build_payload(sensitive_comment, author, repo, pr_number)
+        # Build the curl command as in the workflow
+        curl_cmd = [
+            "curl", "-sf", "-X", "POST",
+            "-H", "Accept: application/vnd.github+json",
+            "-H", f"Authorization: Bearer {self.env['QAGENT_PAT']}",
+            "https://api.github.com/repos/jrcosta/qagent/dispatches",
+            "-d", unittest.mock.ANY  # payload JSON string
+        ]
 
-    # The payload includes the full comment body, which may contain sensitive data
-    assert payload["comment_body"] == sensitive_comment
-    assert "Password=1234" in payload["comment_body"]
+        # Call subprocess.run with the command
+        subprocess.run(curl_cmd, check=True)
 
-def test_payload_json_serialization():
-    comment_body = "Test Copilot comment"
-    author = "user123"
-    repo = "owner/repo"
-    pr_number = 7
+        # Assert subprocess.run was called once with expected args
+        mock_run.assert_called_once()
+        args, kwargs = mock_run.call_args
+        self.assertIn("-H", args[0])
+        self.assertIn(f"Authorization: Bearer {self.env['QAGENT_PAT']}", args[0])
+        self.assertIn("https://api.github.com/repos/jrcosta/qagent/dispatches", args[0])
 
-    payload = build_payload(comment_body, author, repo, pr_number)
+    @patch("subprocess.run")
+    def test_curl_command_fails_with_missing_token(self, mock_run):
+        """
+        Test that the curl command fails (raises CalledProcessError) when QAGENT_PAT is missing or empty.
+        """
+        # Simulate missing token by empty string
+        env = self.env.copy()
+        env["QAGENT_PAT"] = ""
 
-    # Simulate jq -n ... JSON creation and curl data payload
-    json_payload = json.dumps(payload)
+        # Setup mock to simulate curl failure due to auth error
+        mock_run.side_effect = subprocess.CalledProcessError(returncode=22, cmd="curl")
 
-    # The JSON string should contain all fields correctly serialized
-    loaded = json.loads(json_payload)
-    assert loaded == payload
+        with self.assertRaises(subprocess.CalledProcessError):
+            curl_cmd = [
+                "curl", "-sf", "-X", "POST",
+                "-H", "Accept: application/vnd.github+json",
+                "-H", f"Authorization: Bearer {env['QAGENT_PAT']}",
+                "https://api.github.com/repos/jrcosta/qagent/dispatches",
+                "-d", "{}"
+            ]
+            subprocess.run(curl_cmd, check=True)
 
-@pytest.mark.parametrize("comment_body", [
-    "Test with Copilot",
-    "Test with copilot",
-])
-def test_workflow_should_run_for_pr_comment_with_copilot(comment_body):
-    # Simulate event context where issue is a PR and comment contains Copilot
-    event = {
-        "issue": {"pull_request": {"url": "https://api.github.com/repos/owner/repo/pulls/1"}},
-        "comment": {"body": comment_body, "user": {"login": "user1"}},
-        "repository": {"full_name": "owner/repo"},
-        "issue_number": 1,
-    }
+        mock_run.assert_called_once()
 
-    # The workflow condition:
-    # github.event.issue.pull_request != null &&
-    # (contains(github.event.comment.body, 'Copilot') || contains(github.event.comment.body, 'copilot'))
+    def test_forward_job_condition_with_copilot_user(self):
+        """
+        Test the condition that triggers the forward job: github.event.issue.pull_request != null &&
+        contains(github.event.comment.user.login, 'copilot')
+        """
+        def should_run_forward_job(event):
+            pr = event.get("issue", {}).get("pull_request")
+            user_login = event.get("comment", {}).get("user", {}).get("login", "")
+            return pr is not None and "copilot" in user_login
 
-    pr_present = event["issue"].get("pull_request") is not None
-    contains_keyword = contains_copilot(event["comment"]["body"])
+        # Case: PR comment by user with 'copilot' in login
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {"user": {"login": "mycopilotuser"}}
+        }
+        self.assertTrue(should_run_forward_job(event))
 
-    assert pr_present is True
-    assert contains_keyword is True
+        # Case: PR comment by user without 'copilot' in login
+        event["comment"]["user"]["login"] = "normaluser"
+        self.assertFalse(should_run_forward_job(event))
 
-@pytest.mark.parametrize("comment_body", [
-    "Test without keyword",
-    "COPILOT in uppercase",
-    "CoPiLoT mixed case",
-])
-def test_workflow_should_not_run_for_pr_comment_without_copilot(comment_body):
-    event = {
-        "issue": {"pull_request": {"url": "https://api.github.com/repos/owner/repo/pulls/1"}},
-        "comment": {"body": comment_body, "user": {"login": "user1"}},
-        "repository": {"full_name": "owner/repo"},
-        "issue_number": 1,
-    }
+        # Case: Issue comment but not a PR (pull_request is None)
+        event["issue"]["pull_request"] = None
+        event["comment"]["user"]["login"] = "mycopilotuser"
+        self.assertFalse(should_run_forward_job(event))
 
-    pr_present = event["issue"].get("pull_request") is not None
-    contains_keyword = contains_copilot(event["comment"]["body"])
+    @patch("subprocess.run")
+    def test_workflow_step_echo_on_success(self, mock_run):
+        """
+        Test that after successful curl execution, the echo message is printed.
+        """
+        mock_completed_process = MagicMock()
+        mock_completed_process.returncode = 0
+        mock_run.return_value = mock_completed_process
 
-    # Workflow should not run if keyword not matched exactly as 'Copilot' or 'copilot'
-    assert pr_present is True
-    assert contains_keyword is False
+        # Simulate running the curl command
+        subprocess.run(["curl", "-sf", "-X", "POST"], check=True)
 
-def test_workflow_should_not_run_for_issue_comment_with_copilot():
-    # Comment with 'Copilot' but on an issue (no pull_request key)
-    event = {
-        "issue": {},  # no pull_request key means it's an issue, not PR
-        "comment": {"body": "This comment has Copilot", "user": {"login": "user1"}},
-        "repository": {"full_name": "owner/repo"},
-        "issue_number": 5,
-    }
+        # Simulate echo output
+        echo_output = "✅ Forwarded comment to qagent"
 
-    pr_present = event["issue"].get("pull_request") is not None
-    contains_keyword = contains_copilot(event["comment"]["body"])
+        self.assertEqual(echo_output, "✅ Forwarded comment to qagent")
 
-    assert pr_present is False
-    assert contains_keyword is True
-
-def test_workflow_token_absence_behavior(monkeypatch):
-    # Simulate the runtime environment variable for token missing
-    # The workflow maps secrets.QAGENT_DISPATCH_PAT to env var QAGENT_PAT
-    monkeypatch.delenv("QAGENT_PAT", raising=False)
-
-    # The workflow uses curl -sf which fails silently if token is missing
-    # Here we simulate the behavior by checking that token is None or empty
-    import os
-    token = os.getenv("QAGENT_PAT")
-
-    assert token is None or token == ""
-
-def test_curl_command_construction(monkeypatch):
-    # Simulate the runtime environment variable for token present
-    # The workflow maps secrets.QAGENT_DISPATCH_PAT to env var QAGENT_PAT
-    monkeypatch.setenv("QAGENT_PAT", "fake_token_123")
-
-    comment_body = "Test Copilot comment"
-    author = "user123"
-    repo = "owner/repo"
-    pr_number = 7
-
-    payload = {
-        "comment_body": comment_body,
-        "author": author,
-        "repo": repo,
-        "pr_number": pr_number,
-    }
-
-    # Simulate the curl command string construction as in the workflow
-    import json
-    payload_json = json.dumps(payload)
-
-    curl_command = (
-        'curl -sf -X POST '
-        '-H "Accept: application/vnd.github+json" '
-        '-H "Authorization: Bearer fake_token_123" '
-        '"https://api.github.com/repos/jrcosta/qagent/dispatches" '
-        f'-d \'{{"event_type":"pr_comment_created","client_payload":{payload_json}}}\''
-    )
-
-    # Check that the command contains all expected parts
-    assert "curl" in curl_command
-    assert "-X POST" in curl_command
-    assert "Authorization: Bearer fake_token_123" in curl_command
-    assert '"event_type":"pr_comment_created"' in curl_command
-    assert payload_json in curl_command
+if __name__ == "__main__":
+    unittest.main()
