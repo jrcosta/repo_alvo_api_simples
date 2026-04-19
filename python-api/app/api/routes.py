@@ -7,6 +7,7 @@ from app.schemas import (
     CountResponse,
     EmailResponse,
     AgeEstimateResponse,
+    EmailDomainCountResponse,
 )
 from app.services.external_service import ExternalService
 from app.services.user_service import UserService
@@ -119,6 +120,18 @@ def find_duplicate_users() -> list[UserResponse]:
     duplicated_emails = {email for email, count in email_counts.items() if count > 1}
 
     return [user for user in all_users if user.email in duplicated_emails]
+
+
+@router.get("/users/email-domains", response_model=list[EmailDomainCountResponse], tags=["users"])
+def users_email_domains() -> list[EmailDomainCountResponse]:
+    """Return a summary of users grouped by email domain."""
+    from collections import Counter
+
+    domain_counts = Counter(user.email.split("@")[-1].lower() for user in user_service.list_users())
+    return [
+        EmailDomainCountResponse(domain=domain, count=count)
+        for domain, count in sorted(domain_counts.items())
+    ]
 
 
 @router.get("/users/{user_id}/age-estimate", response_model=AgeEstimateResponse, tags=["external"])

@@ -28,3 +28,8 @@ class AgeEstimateResponse(BaseModel):
     name: str
     age: int | None = None
     count: int | None = None
+
+
+class EmailDomainCountResponse(BaseModel):
+    domain: str
+    count: int
