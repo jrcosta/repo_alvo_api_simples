@@ -1,152 +1,97 @@
 package com.repoalvo.javaapi;
 
 import com.repoalvo.javaapi.controller.UserController;
-import com.repoalvo.javaapi.model.UserExistsResponse;
 import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.ArgumentMatchers;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.*;
 
 class UserControllerUnitTest {
 
-    @Mock
     private UserService userService;
-
-    @Mock
     private ExternalService externalService;
-
-    @InjectMocks
     private UserController userController;
 
     @BeforeEach
     void setup() {
-        MockitoAnnotations.openMocks(this);
+        userService = mock(UserService.class);
+        externalService = mock(ExternalService.class);
+        userController = new UserController(userService, externalService);
     }
 
     @Test
-    void userExistsShouldReturnTrueWhenUserExists() {
-        int userId = 1;
-        UserResponse user = new UserResponse(userId, "Ana Silva", "ana@example.com");
-        when(userService.getById(userId)).thenReturn(Optional.of(user));
+    void listUserNamesShouldCallListAllUsersOnce() {
+        when(userService.listAllUsers()).thenReturn(List.of());
 
-        UserExistsResponse response = userController.userExists(userId);
+        userController.listUserNames();
 
-        assertThat(response).isNotNull();
-        assertThat(response.exists()).isTrue();
-
-        verify(userService, times(1)).getById(userId);
+        verify(userService, times(1)).listAllUsers();
     }
 
     @Test
-    void userExistsShouldReturnFalseWhenUserDoesNotExist() {
-        int userId = 999;
-        when(userService.getById(userId)).thenReturn(Optional.empty());
+    void listUserNamesShouldReturnSortedNamesIgnoringCase() {
+        List<UserResponse> users = List.of(
+                new UserResponse(1, "Bruno", "bruno@example.com"),
+                new UserResponse(2, "ana", "ana@example.com"),
+                new UserResponse(3, "Carlos", "carlos@example.com")
+        );
+        when(userService.listAllUsers()).thenReturn(users);
 
-        UserExistsResponse response = userController.userExists(userId);
+        List<String> result = userController.listUserNames();
 
-        assertThat(response).isNotNull();
-        assertThat(response.exists()).isFalse();
-
-        verify(userService, times(1)).getById(userId);
+        assertThat(result).containsExactly("ana", "Bruno", "Carlos");
     }
 
     @Test
-    void userExistsShouldPropagateUnexpectedException() {
-        int userId = 5;
-        when(userService.getById(userId)).thenThrow(new RuntimeException("Unexpected error"));
+    void listUserNamesShouldReturnEmptyListWhenNoUsers() {
+        when(userService.listAllUsers()).thenReturn(List.of());
 
-        assertThatThrownBy(() -> userController.userExists(userId))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Unexpected error");
+        List<String> result = userController.listUserNames();
 
-        verify(userService, times(1)).getById(userId);
+        assertThat(result).isEmpty();
     }
 
     @Test
-    void userExistsShouldReturnFalseForNegativeId() {
-        int invalidUserId = -1;
-        when(userService.getById(invalidUserId)).thenReturn(Optional.empty());
+    void listUserNamesShouldIncludeDuplicateNames() {
+        List<UserResponse> users = List.of(
+                new UserResponse(1, "Ana", "ana1@example.com"),
+                new UserResponse(2, "ana", "ana2@example.com"),
+                new UserResponse(3, "Bruno", "bruno@example.com")
+        );
+        when(userService.listAllUsers()).thenReturn(users);
 
-        UserExistsResponse response = userController.userExists(invalidUserId);
+        List<String> result = userController.listUserNames();
 
-        assertThat(response).isNotNull();
-        assertThat(response.exists()).isFalse();
-
-        verify(userService, times(1)).getById(invalidUserId);
+        assertThat(result).containsExactly("Ana", "ana", "Bruno");
     }
 
     @Test
-    void userExistsShouldReturnFalseForZeroId() {
-        int zeroUserId = 0;
-        when(userService.getById(zeroUserId)).thenReturn(Optional.empty());
+    void listUserNamesShouldHandleNullAndEmptyNamesWithoutException() {
+        List<UserResponse> users = List.of(
+                new UserResponse(1, null, "nullname@example.com"),
+                new UserResponse(2, "", "emptyname@example.com"),
+                new UserResponse(3, "Bruno", "bruno@example.com")
+        );
+        when(userService.listAllUsers()).thenReturn(users);
 
-        UserExistsResponse response = userController.userExists(zeroUserId);
-
-        assertThat(response).isNotNull();
-        assertThat(response.exists()).isFalse();
-
-        verify(userService, times(1)).getById(zeroUserId);
-    }
-
-    @Test
-    void userExistsShouldNotCallExternalService() {
-        int userId = 1;
-        UserResponse user = new UserResponse(userId, "Ana Silva", "ana@example.com");
-        when(userService.getById(userId)).thenReturn(Optional.of(user));
-
-        userController.userExists(userId);
-
-        verify(userService, times(1)).getById(userId);
-        verifyNoInteractions(externalService);
-    }
-
-    @Test
-    void userExistsShouldBeIdempotentAndNotChangeState() {
-        int userId = 3;
-        UserResponse user = new UserResponse(userId, "Carlos Silva", "carlos@example.com");
-        when(userService.getById(userId)).thenReturn(Optional.of(user));
-
-        UserExistsResponse firstResponse = userController.userExists(userId);
-        UserExistsResponse secondResponse = userController.userExists(userId);
-
-        assertThat(firstResponse).isNotNull();
-        assertThat(secondResponse).isNotNull();
-        assertThat(firstResponse.exists()).isTrue();
-        assertThat(secondResponse.exists()).isTrue();
-
-        verify(userService, times(2)).getById(userId);
-        verifyNoMoreInteractions(userService);
-        verifyNoInteractions(externalService);
-    }
-
-    @Test
-    void userExistsResponseShouldContainOnlyExistsField() {
-        int userId = 4;
-        UserResponse user = new UserResponse(userId, "Maria Silva", "maria@example.com");
-        when(userService.getById(userId)).thenReturn(Optional.of(user));
-
-        UserExistsResponse response = userController.userExists(userId);
-
-        assertThat(response).isNotNull();
-        assertThat(response.exists()).isTrue();
-
-        // Assuming UserExistsResponse only has 'exists' field, check no other fields via reflection
-        // This is a simple check to ensure no unexpected fields are present
-        var fields = response.getClass().getDeclaredFields();
-        assertThat(fields).hasSize(1);
-        assertThat(fields[0].getName()).isEqualTo("exists");
-
-        verify(userService, times(1)).getById(userId);
-        verifyNoInteractions(externalService);
+        // The current implementation does not explicitly handle null names,
+        // so this test verifies it does not throw NullPointerException.
+        // It may throw NPE if sorting encounters null, so we catch and fail if that happens.
+        assertDoesNotThrow(() -> {
+            List<String> result = userController.listUserNames();
+            // The result should contain null and empty string as is, sorted ignoring case.
+            // Sorting with null will throw NPE, so if no exception, nulls are handled.
+            // If nulls are present, they should be first or last depending on sort.
+            assertThat(result).containsExactlyInAnyOrder(null, "", "Bruno");
+        });
     }
 }
