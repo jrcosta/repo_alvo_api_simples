@@ -71,6 +71,28 @@ class UserControllerUnitTest {
     }
 
     @Test
+    @DisplayName("listUsers returns empty list when limit is negative")
+    void listUsersShouldReturnEmptyListWhenLimitIsNegative() {
+        when(userService.listUsers(-5, 0)).thenReturn(List.of());
+
+        List<UserResponse> result = userController.listUsers(-5, 0);
+
+        assertThat(result).isEmpty();
+        verify(userService, times(1)).listUsers(-5, 0);
+    }
+
+    @Test
+    @DisplayName("listUsers returns empty list when limit and offset are negative")
+    void listUsersShouldReturnEmptyListWhenLimitAndOffsetAreNegative() {
+        when(userService.listUsers(-3, -7)).thenReturn(List.of());
+
+        List<UserResponse> result = userController.listUsers(-3, -7);
+
+        assertThat(result).isEmpty();
+        verify(userService, times(1)).listUsers(-3, -7);
+    }
+
+    @Test
     @DisplayName("usersCount returns count of all users from userService")
     void usersCountShouldReturnCorrectCount() {
         List<UserResponse> allUsers = List.of(
@@ -140,6 +162,18 @@ class UserControllerUnitTest {
         UserResponse result = userController.firstUserEmail();
 
         assertThat(result).isEqualTo(user1);
+        verify(userService, times(1)).listAllUsers();
+    }
+
+    @Test
+    @DisplayName("firstUserEmail throws 404 NOT FOUND when user list is empty")
+    void firstUserEmailShouldThrow404WhenUserListIsEmpty() {
+        when(userService.listAllUsers()).thenReturn(List.of());
+
+        assertThatThrownBy(() -> userController.firstUserEmail())
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(NOT_FOUND));
+
         verify(userService, times(1)).listAllUsers();
     }
 
@@ -280,6 +314,22 @@ class UserControllerUnitTest {
         List<UserResponse> result = userController.searchUsers("xyz");
 
         assertThat(result).isEmpty();
+        verify(userService, times(1)).listAllUsers();
+    }
+
+    @Test
+    @DisplayName("searchUsers returns users matching search term with special characters case-insensitively")
+    void searchUsersShouldReturnUsersMatchingSpecialCharactersAndCaseInsensitive() {
+        UserResponse user1 = new UserResponse(1, "Ana Silva", "ana@example.com");
+        UserResponse user2 = new UserResponse(2, "Bruno Lima", "bruno@example.com");
+        UserResponse user3 = new UserResponse(3, "Carlos", "carlos@example.com");
+        UserResponse user4 = new UserResponse(4, "Ánna-Maria", "anna@example.com");
+        List<UserResponse> allUsers = List.of(user1, user2, user3, user4);
+        when(userService.listAllUsers()).thenReturn(allUsers);
+
+        List<UserResponse> result = userController.searchUsers("ÁN");
+
+        assertThat(result).containsExactly(user4);
         verify(userService, times(1)).listAllUsers();
     }
 
