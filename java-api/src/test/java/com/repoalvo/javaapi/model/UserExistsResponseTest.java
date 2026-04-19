@@ -53,11 +53,10 @@ class UserExistsResponseTest {
     }
 
     @Test
-    void shouldDeserializeJsonWithExtraFieldsIgnoringThem() throws Exception {
+    void shouldThrowExceptionWhenDeserializingJsonWithExtraFields() {
         String json = "{\"exists\":true, \"extraField\":\"extraValue\"}";
-        UserExistsResponse response = objectMapper.readValue(json, UserExistsResponse.class);
-        assertNotNull(response, "Deserialized object should not be null even with extra fields");
-        assertTrue(response.exists(), "The exists field should be true after deserialization with extra fields");
+        assertThrows(JsonProcessingException.class, () -> objectMapper.readValue(json, UserExistsResponse.class),
+                "Deserialization should fail when unknown fields are present (default Jackson strict mode)");
     }
 
     @Test

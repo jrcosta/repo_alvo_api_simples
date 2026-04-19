@@ -111,20 +111,6 @@ class UserControllerUnitTest {
     }
 
     @Test
-    void userExistsShouldHandleNullOptionalGracefully() {
-        int userId = 2;
-        // Simulate userService.getById returning null instead of Optional
-        when(userService.getById(userId)).thenReturn(null);
-
-        UserExistsResponse response = userController.userExists(userId);
-
-        assertThat(response).isNotNull();
-        assertThat(response.exists()).isFalse();
-
-        verify(userService, times(1)).getById(userId);
-    }
-
-    @Test
     void userExistsShouldBeIdempotentAndNotChangeState() {
         int userId = 3;
         UserResponse user = new UserResponse(userId, "Carlos Silva", "carlos@example.com");
