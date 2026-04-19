@@ -120,8 +120,8 @@ class UserControllerUnitTest {
 
         List<String> result = userController.listUserNames();
 
-        // Expected order ignoring case and spaces preserved in names
-        assertThat(result).containsExactly("  Ana", "ana", " Bruno ", "bruno", "Carlos");
+        // Space (ASCII 32) < 'a' (ASCII 97), so names starting with spaces sort first
+        assertThat(result).containsExactly("  Ana", " Bruno ", "ana", "bruno", "Carlos");
     }
 
     @Test

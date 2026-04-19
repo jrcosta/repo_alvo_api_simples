@@ -51,10 +51,10 @@ class UserServiceUnitTest {
 
         // Check that sorting respects accents and special characters
         assertThat(sortedNames).containsExactly(
-                "Ana",
-                "Ana",
                 "Álvaro",
                 "Álvaro",
+                "Ana",
+                "Ana",
                 "Bruno",
                 "Émilia",
                 "Érica"

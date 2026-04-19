@@ -108,8 +108,11 @@ public class UserController {
 
     @GetMapping("/users/names")
     public List<String> listUserNames() {
-        return userService.listAllUsers()
-                .stream()
+        List<UserResponse> users = userService.listAllUsers();
+        if (users == null) {
+            return List.of();
+        }
+        return users.stream()
                 .map(UserResponse::name)
                 .sorted(String::compareToIgnoreCase)
                 .toList();
