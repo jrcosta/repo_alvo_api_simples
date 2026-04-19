@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,6 +53,18 @@ class UserControllerUnitTest {
         UserResponse result = userController.firstUserEmail();
 
         assertThat(result).isEqualTo(singleUser);
+        verify(userService, times(1)).listAllUsers();
+    }
+
+    @Test
+    @DisplayName("firstUserEmail throws NOT_FOUND when user list is empty")
+    void firstUserEmailShouldThrowNotFoundWhenListIsEmpty() {
+        when(userService.listAllUsers()).thenReturn(List.of());
+
+        assertThatThrownBy(() -> userController.firstUserEmail())
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(NOT_FOUND));
+
         verify(userService, times(1)).listAllUsers();
     }
 
