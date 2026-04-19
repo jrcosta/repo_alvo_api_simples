@@ -9,6 +9,10 @@ on:
 
 jobs:
   trigger-qagent:
+    # Evita loop infinito: não dispara quando o commit vem do qagent (merge de PR de testes)
+    if: >-
+      !contains(github.event.head_commit.message, '[skip-qagent]') &&
+      github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
