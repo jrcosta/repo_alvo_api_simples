@@ -8,7 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,62 +22,73 @@ class UserControllerUnitTest {
     private final UserController userController = new UserController(userService, externalService);
 
     @Test
-    @DisplayName("listUsers returns empty list when limit is zero and offset is negative")
-    void listUsersShouldReturnEmptyListWhenLimitZeroAndOffsetNegative() {
-        when(userService.listUsers(0, -1)).thenReturn(List.of());
+    @DisplayName("getUserByEmail returns UserResponse when email exists")
+    void getUserByEmailShouldReturnUserResponseWhenEmailExists() {
+        String email = "ana@example.com";
+        UserResponse user = new UserResponse(1, "Ana Silva", email);
+        when(userService.findByEmail(email)).thenReturn(Optional.of(user));
 
-        List<UserResponse> result = userController.listUsers(0, -1);
+        UserResponse result = userController.getUserByEmail(email);
 
-        assertThat(result).isEmpty();
-        verify(userService, times(1)).listUsers(0, -1);
+        assertThat(result).isEqualTo(user);
+        verify(userService, times(1)).findByEmail(email);
     }
 
     @Test
-    @DisplayName("listUsers returns empty list when limit is very large and offset is negative")
-    void listUsersShouldReturnEmptyListWhenLimitVeryLargeAndOffsetNegative() {
-        int largeLimit = Integer.MAX_VALUE;
-        when(userService.listUsers(largeLimit, -10)).thenReturn(List.of());
+    @DisplayName("getUserByEmail throws ResponseStatusException 404 when email does not exist")
+    void getUserByEmailShouldThrowNotFoundWhenEmailDoesNotExist() {
+        String email = "naoexiste@example.com";
+        when(userService.findByEmail(email)).thenReturn(Optional.empty());
 
-        List<UserResponse> result = userController.listUsers(largeLimit, -10);
-
-        assertThat(result).isEmpty();
-        verify(userService, times(1)).listUsers(largeLimit, -10);
-    }
-
-    @Test
-    @DisplayName("firstUserEmail returns the first user when list has a single user")
-    void firstUserEmailShouldReturnFirstUserWhenSingleUserExists() {
-        UserResponse singleUser = new UserResponse(1, "Single User", "single@example.com");
-        when(userService.listAllUsers()).thenReturn(List.of(singleUser));
-
-        UserResponse result = userController.firstUserEmail();
-
-        assertThat(result).isEqualTo(singleUser);
-        verify(userService, times(1)).listAllUsers();
-    }
-
-    @Test
-    @DisplayName("firstUserEmail throws NOT_FOUND when user list is empty")
-    void firstUserEmailShouldThrowNotFoundWhenListIsEmpty() {
-        when(userService.listAllUsers()).thenReturn(List.of());
-
-        assertThatThrownBy(() -> userController.firstUserEmail())
+        assertThatThrownBy(() -> userController.getUserByEmail(email))
                 .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(NOT_FOUND));
+                .satisfies(ex -> {
+                    ResponseStatusException rse = (ResponseStatusException) ex;
+                    assertThat(rse.getStatusCode()).isEqualTo(NOT_FOUND);
+                    assertThat(rse.getReason()).isEqualTo("Usuário não encontrado");
+                });
 
-        verify(userService, times(1)).listAllUsers();
+        verify(userService, times(1)).findByEmail(email);
     }
 
     @Test
-    @DisplayName("listUsers propagates exception thrown by userService")
-    void listUsersShouldPropagateExceptionWhenUserServiceThrows() {
-        when(userService.listUsers(5, 5)).thenThrow(new IllegalArgumentException("Invalid parameters"));
+    @DisplayName("getUserByEmail calls userService.findByEmail exactly once with correct email")
+    void getUserByEmailShouldCallUserServiceFindByEmailOnce() {
+        String email = "bruno@example.com";
+        UserResponse user = new UserResponse(2, "Bruno Lima", email);
+        when(userService.findByEmail(email)).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> userController.listUsers(5, 5))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Invalid parameters");
+        userController.getUserByEmail(email);
 
-        verify(userService, times(1)).listUsers(5, 5);
+        verify(userService, times(1)).findByEmail(email);
     }
 
+    @Test
+    @DisplayName("getUserByEmail throws ResponseStatusException 404 when email is empty string")
+    void getUserByEmailShouldThrowNotFoundWhenEmailIsEmpty() {
+        String email = "";
+        when(userService.findByEmail(email)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userController.getUserByEmail(email))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> {
+                    ResponseStatusException rse = (ResponseStatusException) ex;
+                    assertThat(rse.getStatusCode()).isEqualTo(NOT_FOUND);
+                    assertThat(rse.getReason()).isEqualTo("Usuário não encontrado");
+                });
+
+        verify(userService, times(1)).findByEmail(email);
+    }
+
+    @Test
+    @DisplayName("getUserByEmail throws NullPointerException when email is null")
+    void getUserByEmailShouldThrowExceptionWhenEmailIsNull() {
+        // The method parameter is annotated with @RequestParam String email,
+        // so null is not expected in normal controller usage.
+        // But testing method directly for robustness.
+        assertThatThrownBy(() -> userController.getUserByEmail(null))
+                .isInstanceOf(NullPointerException.class);
+
+        verify(userService, never()).findByEmail(any());
+    }
 }
