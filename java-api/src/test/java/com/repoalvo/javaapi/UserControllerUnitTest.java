@@ -1,19 +1,24 @@
 package com.repoalvo.javaapi;
 
 import com.repoalvo.javaapi.controller.UserController;
+import com.repoalvo.javaapi.model.AgeEstimateResponse;
+import com.repoalvo.javaapi.model.UserCreateRequest;
 import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
+import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 class UserControllerUnitTest {
 
@@ -26,22 +31,6 @@ class UserControllerUnitTest {
         userService = mock(UserService.class);
         externalService = mock(ExternalService.class);
         userController = new UserController(userService, externalService);
-    }
-
-    // Removed tests for listUserNames() as method no longer exists
-
-    @Test
-    @DisplayName("UserController should not have method listUserNames")
-    void userControllerShouldNotHaveListUserNamesMethod() {
-        Method[] methods = UserController.class.getDeclaredMethods();
-        boolean hasListUserNames = false;
-        for (Method method : methods) {
-            if ("listUserNames".equals(method.getName())) {
-                hasListUserNames = true;
-                break;
-            }
-        }
-        assertThat(hasListUserNames).isFalse();
     }
 
     @Test
@@ -74,6 +63,124 @@ class UserControllerUnitTest {
         assertThat(countResponse).isNotNull();
         assertThat(countResponse.count()).isEqualTo(allUsers.size());
         verify(userService, times(1)).listAllUsers();
+    }
+
+    @Test
+    @DisplayName("createUser returns 201 and created user when email is new")
+    void createUserShouldReturnCreatedUserForNewEmail() {
+        UserCreateRequest request = new UserCreateRequest("Carlos Souza", "carlos@example.com");
+        UserResponse created = new UserResponse(3, "Carlos Souza", "carlos@example.com");
+        when(userService.findByEmail("carlos@example.com")).thenReturn(Optional.empty());
+        when(userService.create(request)).thenReturn(created);
+
+        UserResponse result = userController.createUser(request);
+
+        assertThat(result).isEqualTo(created);
+        verify(userService, times(1)).findByEmail("carlos@example.com");
+        verify(userService, times(1)).create(request);
+    }
+
+    @Test
+    @DisplayName("createUser throws 409 CONFLICT when email already exists")
+    void createUserShouldThrowConflictWhenEmailAlreadyRegistered() {
+        UserCreateRequest request = new UserCreateRequest("Ana Clone", "ana@example.com");
+        UserResponse existing = new UserResponse(1, "Ana Silva", "ana@example.com");
+        when(userService.findByEmail("ana@example.com")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> userController.createUser(request))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(CONFLICT));
+
+        verify(userService, never()).create(any());
+    }
+
+    @Test
+    @DisplayName("firstUserEmail returns the first user when list is not empty")
+    void firstUserEmailShouldReturnFirstUser() {
+        UserResponse user = new UserResponse(1, "Ana Silva", "ana@example.com");
+        when(userService.listAllUsers()).thenReturn(List.of(user));
+
+        UserResponse result = userController.firstUserEmail();
+
+        assertThat(result).isEqualTo(user);
+    }
+
+    @Test
+    @DisplayName("firstUserEmail throws 404 NOT FOUND when no users exist")
+    void firstUserEmailShouldThrow404WhenNoUsers() {
+        when(userService.listAllUsers()).thenReturn(List.of());
+
+        assertThatThrownBy(() -> userController.firstUserEmail())
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("getUserEmail returns email when user exists")
+    void getUserEmailShouldReturnEmailForExistingUser() {
+        UserResponse user = new UserResponse(1, "Ana Silva", "ana@example.com");
+        when(userService.getById(1)).thenReturn(Optional.of(user));
+
+        var result = userController.getUserEmail(1);
+
+        assertThat(result.email()).isEqualTo("ana@example.com");
+    }
+
+    @Test
+    @DisplayName("getUserEmail throws 404 NOT FOUND when user does not exist")
+    void getUserEmailShouldThrow404WhenUserNotFound() {
+        when(userService.getById(99)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userController.getUserEmail(99))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("getUser returns user when found")
+    void getUserShouldReturnUserWhenFound() {
+        UserResponse user = new UserResponse(1, "Ana Silva", "ana@example.com");
+        when(userService.getById(1)).thenReturn(Optional.of(user));
+
+        UserResponse result = userController.getUser(1);
+
+        assertThat(result).isEqualTo(user);
+    }
+
+    @Test
+    @DisplayName("getUser throws 404 NOT FOUND when user does not exist")
+    void getUserShouldThrow404WhenNotFound() {
+        when(userService.getById(99)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userController.getUser(99))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("getUserAgeEstimate returns estimate from externalService when user exists")
+    void getUserAgeEstimateShouldReturnEstimateForExistingUser() {
+        UserResponse user = new UserResponse(1, "Ana Silva", "ana@example.com");
+        AgeEstimateResponse estimate = new AgeEstimateResponse("Ana Silva", 30, 100);
+        when(userService.getById(1)).thenReturn(Optional.of(user));
+        when(externalService.estimateAge("Ana Silva")).thenReturn(estimate);
+
+        AgeEstimateResponse result = userController.getUserAgeEstimate(1);
+
+        assertThat(result).isEqualTo(estimate);
+        verify(externalService, times(1)).estimateAge("Ana Silva");
+    }
+
+    @Test
+    @DisplayName("getUserAgeEstimate throws 404 NOT FOUND when user does not exist")
+    void getUserAgeEstimateShouldThrow404WhenUserNotFound() {
+        when(userService.getById(99)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userController.getUserAgeEstimate(99))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(NOT_FOUND));
+
+        verifyNoInteractions(externalService);
     }
 
     @Test

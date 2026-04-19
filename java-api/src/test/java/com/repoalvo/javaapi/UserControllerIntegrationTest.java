@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -15,6 +16,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -27,14 +30,13 @@ class UserControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    // Removed tests for GET /users/names as endpoint no longer exists
-
     @Test
-    @DisplayName("GET /users/names returns 404 Not Found after removal")
-    void getUsersNamesShouldReturn404() throws Exception {
-        mockMvc.perform(get("/users/names")
+    @DisplayName("GET /health returns 200 and status ok")
+    void getHealthShouldReturnStatusOk() throws Exception {
+        mockMvc.perform(get("/health")
                         .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ok"));
     }
 
     @Test
@@ -105,5 +107,53 @@ class UserControllerIntegrationTest {
         for (Map<String, Object> user : duplicates) {
             assertThat(user).containsKeys("id", "name", "email");
         }
+    }
+
+    @Test
+    @DisplayName("GET /users/1 returns 200 and the expected user")
+    void getUserByIdShouldReturnUser() throws Exception {
+        mockMvc.perform(get("/users/1")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.name").value("Ana Silva"))
+                .andExpect(jsonPath("$.email").value("ana@example.com"));
+    }
+
+    @Test
+    @DisplayName("GET /users/9999 returns 404 when user does not exist")
+    void getUserByIdShouldReturn404WhenNotFound() throws Exception {
+        mockMvc.perform(get("/users/9999")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /users returns 201 and the created user")
+    @DirtiesContext
+    void postUserShouldReturnCreatedUser() throws Exception {
+        String payload = """
+                {"name": "Carlos Souza", "email": "carlos.souza@example.com"}
+                """;
+
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Carlos Souza"))
+                .andExpect(jsonPath("$.email").value("carlos.souza@example.com"));
+    }
+
+    @Test
+    @DisplayName("POST /users returns 409 CONFLICT when email already exists")
+    void postUserShouldReturn409WhenEmailAlreadyExists() throws Exception {
+        String payload = """
+                {"name": "Ana Clone", "email": "ana@example.com"}
+                """;
+
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isConflict());
     }
 }
