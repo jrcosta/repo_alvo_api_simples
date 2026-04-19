@@ -128,19 +128,21 @@ def test_workflow_should_not_run_for_issue_comment_with_copilot():
     assert contains_keyword is True
 
 def test_workflow_token_absence_behavior(monkeypatch):
-    # Simulate environment variable for token missing
-    monkeypatch.delenv("QAGENT_DISPATCH_PAT", raising=False)
+    # Simulate the runtime environment variable for token missing
+    # The workflow maps secrets.QAGENT_DISPATCH_PAT to env var QAGENT_PAT
+    monkeypatch.delenv("QAGENT_PAT", raising=False)
 
     # The workflow uses curl -sf which fails silently if token is missing
     # Here we simulate the behavior by checking that token is None or empty
     import os
-    token = os.getenv("QAGENT_DISPATCH_PAT")
+    token = os.getenv("QAGENT_PAT")
 
     assert token is None or token == ""
 
 def test_curl_command_construction(monkeypatch):
-    # Simulate environment variable for token present
-    monkeypatch.setenv("QAGENT_DISPATCH_PAT", "fake_token_123")
+    # Simulate the runtime environment variable for token present
+    # The workflow maps secrets.QAGENT_DISPATCH_PAT to env var QAGENT_PAT
+    monkeypatch.setenv("QAGENT_PAT", "fake_token_123")
 
     comment_body = "Test Copilot comment"
     author = "user123"
