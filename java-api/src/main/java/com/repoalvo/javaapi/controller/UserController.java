@@ -106,6 +106,15 @@ public class UserController {
                 .toList();
     }
 
+    @GetMapping("/users/names")
+    public List<String> listUserNames() {
+        return userService.listAllUsers()
+                .stream()
+                .map(UserResponse::name)
+                .sorted(String::compareToIgnoreCase)
+                .toList();
+    }
+
     @GetMapping("/users/duplicates")
     public List<UserResponse> findDuplicateUsers() {
         List<UserResponse> allUsers = userService.listAllUsers();
