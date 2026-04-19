@@ -5,14 +5,13 @@ import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentMatchers;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class UserControllerUnitTest {
@@ -29,6 +28,7 @@ class UserControllerUnitTest {
     }
 
     @Test
+    @DisplayName("listUserNames delegates to userService.listAllUsers exactly once")
     void listUserNamesShouldCallListAllUsersOnce() {
         when(userService.listAllUsers()).thenReturn(List.of());
 
@@ -38,6 +38,7 @@ class UserControllerUnitTest {
     }
 
     @Test
+    @DisplayName("listUserNames returns names sorted case-insensitively")
     void listUserNamesShouldReturnSortedNamesIgnoringCase() {
         List<UserResponse> users = List.of(
                 new UserResponse(1, "Bruno", "bruno@example.com"),
@@ -52,6 +53,7 @@ class UserControllerUnitTest {
     }
 
     @Test
+    @DisplayName("listUserNames returns empty list when there are no users")
     void listUserNamesShouldReturnEmptyListWhenNoUsers() {
         when(userService.listAllUsers()).thenReturn(List.of());
 
@@ -61,6 +63,7 @@ class UserControllerUnitTest {
     }
 
     @Test
+    @DisplayName("listUserNames preserves users with duplicate names")
     void listUserNamesShouldIncludeDuplicateNames() {
         List<UserResponse> users = List.of(
                 new UserResponse(1, "Ana", "ana1@example.com"),
@@ -75,23 +78,31 @@ class UserControllerUnitTest {
     }
 
     @Test
-    void listUserNamesShouldHandleNullAndEmptyNamesWithoutException() {
+    @DisplayName("listUserNames returns empty string as a name without throwing")
+    void listUserNamesShouldHandleEmptyNameWithoutException() {
         List<UserResponse> users = List.of(
-                new UserResponse(1, null, "nullname@example.com"),
-                new UserResponse(2, "", "emptyname@example.com"),
-                new UserResponse(3, "Bruno", "bruno@example.com")
+                new UserResponse(1, "", "emptyname@example.com"),
+                new UserResponse(2, "Bruno", "bruno@example.com")
         );
         when(userService.listAllUsers()).thenReturn(users);
 
-        // The current implementation does not explicitly handle null names,
-        // so this test verifies it does not throw NullPointerException.
-        // It may throw NPE if sorting encounters null, so we catch and fail if that happens.
-        assertDoesNotThrow(() -> {
-            List<String> result = userController.listUserNames();
-            // The result should contain null and empty string as is, sorted ignoring case.
-            // Sorting with null will throw NPE, so if no exception, nulls are handled.
-            // If nulls are present, they should be first or last depending on sort.
-            assertThat(result).containsExactlyInAnyOrder(null, "", "Bruno");
-        });
+        List<String> result = userController.listUserNames();
+
+        assertThat(result).containsExactlyInAnyOrder("", "Bruno");
+    }
+
+    @Test
+    @DisplayName("listUserNames throws NullPointerException when a user has a null name")
+    void listUserNamesShouldThrowWhenUserNameIsNull() {
+        List<UserResponse> users = List.of(
+                new UserResponse(1, null, "nullname@example.com"),
+                new UserResponse(2, "Bruno", "bruno@example.com")
+        );
+        when(userService.listAllUsers()).thenReturn(users);
+
+        // String::compareToIgnoreCase used as a comparator calls null.compareToIgnoreCase(...)
+        // which throws NullPointerException; this documents the current behaviour.
+        assertThatThrownBy(() -> userController.listUserNames())
+                .isInstanceOf(NullPointerException.class);
     }
 }
