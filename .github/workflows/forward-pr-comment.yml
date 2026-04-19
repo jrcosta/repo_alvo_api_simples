@@ -8,7 +8,7 @@ jobs:
   forward:
     if: >-
       github.event.issue.pull_request != null &&
-      (contains(github.event.comment.body, 'Copilot') || contains(github.event.comment.body, 'copilot'))
+      github.event.comment.user.login == 'copilot[bot]'
     runs-on: ubuntu-latest
 
     steps:
