@@ -100,4 +100,46 @@ class UserExistsResponseTest {
         assertEquals(responseTrue1.hashCode(), responseTrue2.hashCode(), "Equal objects must have same hashCode");
         assertNotEquals(responseTrue1.hashCode(), responseFalse.hashCode(), "Different objects should have different hashCode");
     }
+
+    @Test
+    void shouldReturnFalseWhenEqualsComparedWithDifferentClass() {
+        UserExistsResponse response = new UserExistsResponse(true);
+        String otherObject = "some string";
+        assertNotEquals(response, otherObject, "Equals should return false when compared with an object of different class");
+    }
+
+    @Test
+    void shouldReturnConsistentToStringOutput() {
+        UserExistsResponse responseTrue = new UserExistsResponse(true);
+        UserExistsResponse responseFalse = new UserExistsResponse(false);
+
+        String toStringTrue = responseTrue.toString();
+        String toStringFalse = responseFalse.toString();
+
+        assertNotNull(toStringTrue, "toString should not return null");
+        assertNotNull(toStringFalse, "toString should not return null");
+
+        // Basic check that toString contains the class name and the field value
+        assertTrue(toStringTrue.contains("UserExistsResponse"), "toString should contain class name");
+        assertTrue(toStringTrue.contains("true") || toStringTrue.contains("exists=true"), "toString should contain the exists value true");
+
+        assertTrue(toStringFalse.contains("UserExistsResponse"), "toString should contain class name");
+        assertTrue(toStringFalse.contains("false") || toStringFalse.contains("exists=false"), "toString should contain the exists value false");
+    }
+
+    @Test
+    void shouldDeserializeJsonWithEmptyObjectToDefault() throws Exception {
+        String json = "{}";
+        UserExistsResponse response = objectMapper.readValue(json, UserExistsResponse.class);
+        assertNotNull(response, "Deserialized object from empty JSON should not be null");
+        // Assuming default boolean value false if not set
+        assertFalse(response.exists(), "The exists field should default to false when JSON is empty");
+    }
+
+    @Test
+    void shouldThrowExceptionWhenDeserializingJsonWithNullExistsField() {
+        String json = "{\"exists\":null}";
+        assertThrows(JsonProcessingException.class, () -> objectMapper.readValue(json, UserExistsResponse.class),
+                "Deserialization should fail when 'exists' field is null");
+    }
 }

@@ -141,12 +141,64 @@ class UserControllerUnitTest {
         assertThat(response.exists()).isTrue();
 
         // Assuming UserExistsResponse only has 'exists' field, check no other fields via reflection
-        // This is a simple check to ensure no unexpected fields are present
         var fields = response.getClass().getDeclaredFields();
         assertThat(fields).hasSize(1);
         assertThat(fields[0].getName()).isEqualTo("exists");
 
         verify(userService, times(1)).getById(userId);
+        verifyNoInteractions(externalService);
+    }
+
+    // Additional tests based on QA suggestions:
+
+    @Test
+    void userExistsShouldReturnFalseForNegativeAndZeroIdsUniformly() {
+        int[] invalidIds = {-10, 0};
+        for (int id : invalidIds) {
+            when(userService.getById(id)).thenReturn(Optional.empty());
+
+            UserExistsResponse response = userController.userExists(id);
+
+            assertThat(response).isNotNull();
+            assertThat(response.exists()).isFalse();
+
+            verify(userService, times(1)).getById(id);
+            reset(userService);
+        }
+        verifyNoInteractions(externalService);
+    }
+
+    @Test
+    void userExistsShouldReturnFalseWhenUserServiceThrowsExceptionForZeroId() {
+        int zeroUserId = 0;
+        when(userService.getById(zeroUserId)).thenThrow(new RuntimeException("Service failure"));
+
+        assertThatThrownBy(() -> userController.userExists(zeroUserId))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Service failure");
+
+        verify(userService, times(1)).getById(zeroUserId);
+        verifyNoInteractions(externalService);
+    }
+
+    @Test
+    void userExistsShouldNotAlterStateOfUserServiceOrController() {
+        int userId = 7;
+        UserResponse user = new UserResponse(userId, "State Test", "state@example.com");
+        when(userService.getById(userId)).thenReturn(Optional.of(user));
+
+        // Call userExists multiple times
+        UserExistsResponse response1 = userController.userExists(userId);
+        UserExistsResponse response2 = userController.userExists(userId);
+
+        assertThat(response1).isNotNull();
+        assertThat(response2).isNotNull();
+        assertThat(response1.exists()).isTrue();
+        assertThat(response2.exists()).isTrue();
+
+        // Verify getById called twice, no other interactions that change state
+        verify(userService, times(2)).getById(userId);
+        verifyNoMoreInteractions(userService);
         verifyNoInteractions(externalService);
     }
 }

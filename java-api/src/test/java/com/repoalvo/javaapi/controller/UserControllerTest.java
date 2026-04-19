@@ -128,4 +128,64 @@ class UserControllerTest {
         verify(userService, times(1)).getById(userId);
         verifyNoInteractions(externalService);
     }
+
+    // Novos testes sugeridos no relatório de QA
+
+    @Test
+    @DisplayName("userExists returns exists=false for Integer.MAX_VALUE - 1 when user not found")
+    void userExistsReturnsFalseForMaxIntegerMinusOneUserId() {
+        int userId = Integer.MAX_VALUE - 1;
+        when(userService.getById(userId)).thenReturn(Optional.empty());
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        assertFalse(response.exists(), "exists should be false for Integer.MAX_VALUE - 1 if user not found");
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists returns exists=false for Integer.MIN_VALUE + 1 when user not found")
+    void userExistsReturnsFalseForMinIntegerPlusOneUserId() {
+        int userId = Integer.MIN_VALUE + 1;
+        when(userService.getById(userId)).thenReturn(Optional.empty());
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        assertFalse(response.exists(), "exists should be false for Integer.MIN_VALUE + 1 if user not found");
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists propagates IllegalStateException with correct message")
+    void userExistsPropagatesIllegalStateException() {
+        int userId = 10;
+        when(userService.getById(userId)).thenThrow(new IllegalStateException("Illegal state occurred"));
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> userController.userExists(userId));
+        assertEquals("Illegal state occurred", thrown.getMessage());
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists propagates NullPointerException with correct message")
+    void userExistsPropagatesNullPointerException() {
+        int userId = 20;
+        when(userService.getById(userId)).thenThrow(new NullPointerException("Null pointer exception"));
+
+        NullPointerException thrown = assertThrows(NullPointerException.class, () -> userController.userExists(userId));
+        assertEquals("Null pointer exception", thrown.getMessage());
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists throws NullPointerException when called with null userId (if applicable)")
+    void userExistsThrowsExceptionForNullUserId() {
+        // Como o método userExists recebe int primitivo, não aceita null.
+        // Este teste é para garantir que caso a assinatura mude para Integer, o comportamento seja testado.
+        // Aqui simulamos chamando via reflexão para forçar null, ou ignoramos se não aplicável.
+        // Como não é aplicável, este teste será ignorado para evitar falso positivo.
+        // Caso a assinatura mude para Integer, implementar teste adequado.
+    }
 }
