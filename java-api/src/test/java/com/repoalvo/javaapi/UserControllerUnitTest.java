@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,82 +28,81 @@ class UserControllerUnitTest {
         userController = new UserController(userService, externalService);
     }
 
+    // Removed tests for listUserNames() as method no longer exists
+
     @Test
-    @DisplayName("listUserNames delegates to userService.listAllUsers exactly once")
-    void listUserNamesShouldCallListAllUsersOnce() {
-        when(userService.listAllUsers()).thenReturn(List.of());
+    @DisplayName("UserController should not have method listUserNames")
+    void userControllerShouldNotHaveListUserNamesMethod() {
+        Method[] methods = UserController.class.getDeclaredMethods();
+        boolean hasListUserNames = false;
+        for (Method method : methods) {
+            if ("listUserNames".equals(method.getName())) {
+                hasListUserNames = true;
+                break;
+            }
+        }
+        assertThat(hasListUserNames).isFalse();
+    }
 
-        userController.listUserNames();
+    @Test
+    @DisplayName("listUsers returns list from userService with given limit and offset")
+    void listUsersShouldReturnUsersFromService() {
+        List<UserResponse> users = List.of(
+                new UserResponse(1, "Ana Silva", "ana@example.com"),
+                new UserResponse(2, "Bruno Lima", "bruno@example.com")
+        );
+        when(userService.listUsers(10, 5)).thenReturn(users);
 
+        List<UserResponse> result = userController.listUsers(10, 5);
+
+        assertThat(result).isEqualTo(users);
+        verify(userService, times(1)).listUsers(10, 5);
+    }
+
+    @Test
+    @DisplayName("usersCount returns count of all users from userService")
+    void usersCountShouldReturnCorrectCount() {
+        List<UserResponse> allUsers = List.of(
+                new UserResponse(1, "Ana Silva", "ana@example.com"),
+                new UserResponse(2, "Bruno Lima", "bruno@example.com"),
+                new UserResponse(3, "Carlos", "carlos@example.com")
+        );
+        when(userService.listAllUsers()).thenReturn(allUsers);
+
+        var countResponse = userController.usersCount();
+
+        assertThat(countResponse).isNotNull();
+        assertThat(countResponse.count()).isEqualTo(allUsers.size());
         verify(userService, times(1)).listAllUsers();
     }
 
     @Test
-    @DisplayName("listUserNames returns names sorted case-insensitively")
-    void listUserNamesShouldReturnSortedNamesIgnoringCase() {
-        List<UserResponse> users = List.of(
-                new UserResponse(1, "Bruno", "bruno@example.com"),
-                new UserResponse(2, "ana", "ana@example.com"),
-                new UserResponse(3, "Carlos", "carlos@example.com")
-        );
-        when(userService.listAllUsers()).thenReturn(users);
+    @DisplayName("findDuplicateUsers returns duplicates based on email")
+    void findDuplicateUsersShouldReturnUsersWithDuplicateEmails() {
+        UserResponse user1 = new UserResponse(1, "Ana Silva", "ana@example.com");
+        UserResponse user2 = new UserResponse(2, "Bruno Lima", "bruno@example.com");
+        UserResponse user3 = new UserResponse(3, "Ana Silva Duplicate", "ana@example.com");
+        List<UserResponse> allUsers = List.of(user1, user2, user3);
+        when(userService.listAllUsers()).thenReturn(allUsers);
 
-        List<String> result = userController.listUserNames();
+        List<UserResponse> duplicates = userController.findDuplicateUsers();
 
-        assertThat(result).containsExactly("ana", "Bruno", "Carlos");
+        assertThat(duplicates).containsExactlyInAnyOrder(user1, user3);
+        verify(userService, times(1)).listAllUsers();
     }
 
     @Test
-    @DisplayName("listUserNames returns empty list when there are no users")
-    void listUserNamesShouldReturnEmptyListWhenNoUsers() {
-        when(userService.listAllUsers()).thenReturn(List.of());
+    @DisplayName("searchUsers returns users whose names contain search term case-insensitively")
+    void searchUsersShouldFilterUsersByName() {
+        UserResponse user1 = new UserResponse(1, "Ana Silva", "ana@example.com");
+        UserResponse user2 = new UserResponse(2, "Bruno Lima", "bruno@example.com");
+        UserResponse user3 = new UserResponse(3, "Carlos", "carlos@example.com");
+        List<UserResponse> allUsers = List.of(user1, user2, user3);
+        when(userService.listAllUsers()).thenReturn(allUsers);
 
-        List<String> result = userController.listUserNames();
+        List<UserResponse> result = userController.searchUsers("an");
 
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    @DisplayName("listUserNames preserves users with duplicate names")
-    void listUserNamesShouldIncludeDuplicateNames() {
-        List<UserResponse> users = List.of(
-                new UserResponse(1, "Ana", "ana1@example.com"),
-                new UserResponse(2, "ana", "ana2@example.com"),
-                new UserResponse(3, "Bruno", "bruno@example.com")
-        );
-        when(userService.listAllUsers()).thenReturn(users);
-
-        List<String> result = userController.listUserNames();
-
-        assertThat(result).containsExactly("Ana", "ana", "Bruno");
-    }
-
-    @Test
-    @DisplayName("listUserNames returns empty string as a name without throwing")
-    void listUserNamesShouldHandleEmptyNameWithoutException() {
-        List<UserResponse> users = List.of(
-                new UserResponse(1, "", "emptyname@example.com"),
-                new UserResponse(2, "Bruno", "bruno@example.com")
-        );
-        when(userService.listAllUsers()).thenReturn(users);
-
-        List<String> result = userController.listUserNames();
-
-        assertThat(result).containsExactlyInAnyOrder("", "Bruno");
-    }
-
-    @Test
-    @DisplayName("listUserNames throws NullPointerException when a user has a null name")
-    void listUserNamesShouldThrowWhenUserNameIsNull() {
-        List<UserResponse> users = List.of(
-                new UserResponse(1, null, "nullname@example.com"),
-                new UserResponse(2, "Bruno", "bruno@example.com")
-        );
-        when(userService.listAllUsers()).thenReturn(users);
-
-        // String::compareToIgnoreCase used as a comparator calls null.compareToIgnoreCase(...)
-        // which throws NullPointerException; this documents the current behaviour.
-        assertThatThrownBy(() -> userController.listUserNames())
-                .isInstanceOf(NullPointerException.class);
+        assertThat(result).containsExactly(user1);
+        verify(userService, times(1)).listAllUsers();
     }
 }
