@@ -156,4 +156,56 @@ class UserControllerIntegrationTest {
                         .content(payload))
                 .andExpect(status().isConflict());
     }
+
+    @Test
+    @DisplayName("POST /users returns 400 BAD REQUEST when name is null")
+    void postUserShouldReturn400WhenNameIsNull() throws Exception {
+        String payload = """
+                {"name": null, "email": "valid@example.com"}
+                """;
+
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /users returns 400 BAD REQUEST when name is empty")
+    void postUserShouldReturn400WhenNameIsEmpty() throws Exception {
+        String payload = """
+                {"name": "", "email": "valid@example.com"}
+                """;
+
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /users returns 400 BAD REQUEST when email is null")
+    void postUserShouldReturn400WhenEmailIsNull() throws Exception {
+        String payload = """
+                {"name": "Valid Name", "email": null}
+                """;
+
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /users returns 400 BAD REQUEST when email is empty")
+    void postUserShouldReturn400WhenEmailIsEmpty() throws Exception {
+        String payload = """
+                {"name": "Valid Name", "email": ""}
+                """;
+
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+    }
 }
