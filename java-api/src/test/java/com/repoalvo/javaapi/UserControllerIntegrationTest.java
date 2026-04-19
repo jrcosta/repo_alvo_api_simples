@@ -36,14 +36,14 @@ class UserControllerIntegrationTest {
     void usersCountShouldReturnInteger() throws Exception {
         mockMvc.perform(get("/users/count"))
                 .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.count").isNumber());
+                .andExpect(jsonPath("$.count").isNumber());
     }
 
     @Test
     void listUsersShouldSupportPagination() throws Exception {
         mockMvc.perform(get("/users").param("limit", "1").param("offset", "0"))
                 .andExpect(status().isOk())
-                                .andExpect(jsonPath("$[0].id").exists());
+                .andExpect(jsonPath("$[0].id").exists());
     }
 
     @Test
@@ -103,5 +103,32 @@ class UserControllerIntegrationTest {
         mockMvc.perform(get("/users/999/exists"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.exists").value(false));
+    }
+
+    @Test
+    void userExistsEndpointShouldReturnTrueForCreatedUser() throws Exception {
+        String uniqueEmail = "exists-true@example.com";
+        String createPayload = """
+                {
+                  "name": "Exists True",
+                  "email": "%s"
+                }
+                """.formatted(uniqueEmail);
+
+        String createdBody = mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createPayload))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode created = objectMapper.readTree(createdBody);
+        int createdId = created.get("id").asInt();
+
+        mockMvc.perform(get("/users/{userId}/exists", createdId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exists").value(true))
+                .andExpect(jsonPath("$.exists").isBoolean());
     }
 }
