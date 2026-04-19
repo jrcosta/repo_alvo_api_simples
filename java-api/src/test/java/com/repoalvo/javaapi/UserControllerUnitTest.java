@@ -49,6 +49,28 @@ class UserControllerUnitTest {
     }
 
     @Test
+    @DisplayName("listUsers returns empty list when limit is zero")
+    void listUsersShouldReturnEmptyListWhenLimitIsZero() {
+        when(userService.listUsers(0, 0)).thenReturn(List.of());
+
+        List<UserResponse> result = userController.listUsers(0, 0);
+
+        assertThat(result).isEmpty();
+        verify(userService, times(1)).listUsers(0, 0);
+    }
+
+    @Test
+    @DisplayName("listUsers returns empty list when offset is negative")
+    void listUsersShouldReturnEmptyListWhenOffsetIsNegative() {
+        when(userService.listUsers(10, -1)).thenReturn(List.of());
+
+        List<UserResponse> result = userController.listUsers(10, -1);
+
+        assertThat(result).isEmpty();
+        verify(userService, times(1)).listUsers(10, -1);
+    }
+
+    @Test
     @DisplayName("usersCount returns count of all users from userService")
     void usersCountShouldReturnCorrectCount() {
         List<UserResponse> allUsers = List.of(
@@ -95,24 +117,74 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("firstUserEmail returns the first user when list is not empty")
-    void firstUserEmailShouldReturnFirstUser() {
-        UserResponse user = new UserResponse(1, "Ana Silva", "ana@example.com");
-        when(userService.listAllUsers()).thenReturn(List.of(user));
+    @DisplayName("createUser throws exception when name is null")
+    void createUserShouldThrowExceptionWhenNameIsNull() {
+        UserCreateRequest request = new UserCreateRequest(null, "valid@example.com");
 
-        UserResponse result = userController.firstUserEmail();
-
-        assertThat(result).isEqualTo(user);
+        assertThatThrownBy(() -> userController.createUser(request))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(userService, never()).findByEmail(any());
+        verify(userService, never()).create(any());
     }
 
     @Test
-    @DisplayName("firstUserEmail throws 404 NOT FOUND when no users exist")
-    void firstUserEmailShouldThrow404WhenNoUsers() {
-        when(userService.listAllUsers()).thenReturn(List.of());
+    @DisplayName("createUser throws exception when name is empty")
+    void createUserShouldThrowExceptionWhenNameIsEmpty() {
+        UserCreateRequest request = new UserCreateRequest("", "valid@example.com");
 
-        assertThatThrownBy(() -> userController.firstUserEmail())
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(NOT_FOUND));
+        assertThatThrownBy(() -> userController.createUser(request))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(userService, never()).findByEmail(any());
+        verify(userService, never()).create(any());
+    }
+
+    @Test
+    @DisplayName("createUser throws exception when email is null")
+    void createUserShouldThrowExceptionWhenEmailIsNull() {
+        UserCreateRequest request = new UserCreateRequest("Valid Name", null);
+
+        assertThatThrownBy(() -> userController.createUser(request))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(userService, never()).findByEmail(any());
+        verify(userService, never()).create(any());
+    }
+
+    @Test
+    @DisplayName("createUser throws exception when email is empty")
+    void createUserShouldThrowExceptionWhenEmailIsEmpty() {
+        UserCreateRequest request = new UserCreateRequest("Valid Name", "");
+
+        assertThatThrownBy(() -> userController.createUser(request))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(userService, never()).findByEmail(any());
+        verify(userService, never()).create(any());
+    }
+
+    @Test
+    @DisplayName("createUser does not call create if findByEmail throws unexpected exception")
+    void createUserShouldNotCallCreateIfFindByEmailThrows() {
+        UserCreateRequest request = new UserCreateRequest("Name", "email@example.com");
+        when(userService.findByEmail("email@example.com")).thenThrow(new RuntimeException("Unexpected"));
+
+        assertThatThrownBy(() -> userController.createUser(request))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Unexpected");
+
+        verify(userService, times(1)).findByEmail("email@example.com");
+        verify(userService, never()).create(any());
+    }
+
+    @Test
+    @DisplayName("firstUserEmail returns the first user when list has multiple users")
+    void firstUserEmailShouldReturnFirstUserWhenMultipleUsersExist() {
+        UserResponse user1 = new UserResponse(1, "Ana Silva", "ana@example.com");
+        UserResponse user2 = new UserResponse(2, "Bruno Lima", "bruno@example.com");
+        when(userService.listAllUsers()).thenReturn(List.of(user1, user2));
+
+        UserResponse result = userController.firstUserEmail();
+
+        assertThat(result).isEqualTo(user1);
+        verify(userService, times(1)).listAllUsers();
     }
 
     @Test
@@ -184,6 +256,20 @@ class UserControllerUnitTest {
     }
 
     @Test
+    @DisplayName("getUserAgeEstimate propagates exception when externalService.estimateAge throws")
+    void getUserAgeEstimateShouldPropagateExceptionWhenExternalServiceFails() {
+        UserResponse user = new UserResponse(1, "Ana Silva", "ana@example.com");
+        when(userService.getById(1)).thenReturn(Optional.of(user));
+        when(externalService.estimateAge("Ana Silva")).thenThrow(new RuntimeException("External failure"));
+
+        assertThatThrownBy(() -> userController.getUserAgeEstimate(1))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("External failure");
+
+        verify(externalService, times(1)).estimateAge("Ana Silva");
+    }
+
+    @Test
     @DisplayName("findDuplicateUsers returns duplicates based on email")
     void findDuplicateUsersShouldReturnUsersWithDuplicateEmails() {
         UserResponse user1 = new UserResponse(1, "Ana Silva", "ana@example.com");
@@ -195,6 +281,20 @@ class UserControllerUnitTest {
         List<UserResponse> duplicates = userController.findDuplicateUsers();
 
         assertThat(duplicates).containsExactlyInAnyOrder(user1, user3);
+        verify(userService, times(1)).listAllUsers();
+    }
+
+    @Test
+    @DisplayName("findDuplicateUsers returns empty list when no duplicates exist")
+    void findDuplicateUsersShouldReturnEmptyListWhenNoDuplicates() {
+        UserResponse user1 = new UserResponse(1, "Ana Silva", "ana@example.com");
+        UserResponse user2 = new UserResponse(2, "Bruno Lima", "bruno@example.com");
+        List<UserResponse> allUsers = List.of(user1, user2);
+        when(userService.listAllUsers()).thenReturn(allUsers);
+
+        List<UserResponse> duplicates = userController.findDuplicateUsers();
+
+        assertThat(duplicates).isEmpty();
         verify(userService, times(1)).listAllUsers();
     }
 
@@ -211,5 +311,33 @@ class UserControllerUnitTest {
 
         assertThat(result).containsExactly(user1);
         verify(userService, times(1)).listAllUsers();
+    }
+
+    @Test
+    @DisplayName("searchUsers returns empty list when no users match search term")
+    void searchUsersShouldReturnEmptyListWhenNoMatch() {
+        UserResponse user1 = new UserResponse(1, "Ana Silva", "ana@example.com");
+        UserResponse user2 = new UserResponse(2, "Bruno Lima", "bruno@example.com");
+        List<UserResponse> allUsers = List.of(user1, user2);
+        when(userService.listAllUsers()).thenReturn(allUsers);
+
+        List<UserResponse> result = userController.searchUsers("xyz");
+
+        assertThat(result).isEmpty();
+        verify(userService, times(1)).listAllUsers();
+    }
+
+    @Test
+    @DisplayName("createUser throws exception when userService throws unexpected exception")
+    void createUserShouldPropagateUnexpectedExceptionFromUserService() {
+        UserCreateRequest request = new UserCreateRequest("Name", "email@example.com");
+        when(userService.findByEmail("email@example.com")).thenThrow(new RuntimeException("Unexpected error"));
+
+        assertThatThrownBy(() -> userController.createUser(request))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Unexpected error");
+
+        verify(userService, times(1)).findByEmail("email@example.com");
+        verify(userService, never()).create(any());
     }
 }
