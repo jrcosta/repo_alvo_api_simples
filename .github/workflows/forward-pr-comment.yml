@@ -15,18 +15,30 @@ jobs:
       - name: Forward to qagent via repository_dispatch
         env:
           QAGENT_PAT: ${{ secrets.QAGENT_DISPATCH_PAT }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          REPOSITORY_NAME: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
         run: |
-          PAYLOAD=$(jq -n \
-            --arg body "${{ github.event.comment.body }}" \
-            --arg author "${{ github.event.comment.user.login }}" \
-            --arg repo "${{ github.repository }}" \
-            --arg pr_number "${{ github.event.issue.number }}" \
-            '{comment_body:$body,author:$author,repo:$repo,pr_number:$pr_number}')
+          DISPATCH_PAYLOAD=$(jq -n \
+            --arg body "$COMMENT_BODY" \
+            --arg author "$COMMENT_AUTHOR" \
+            --arg repo "$REPOSITORY_NAME" \
+            --arg pr_number "$PR_NUMBER" \
+            '{
+              event_type:"pr_comment_created",
+              client_payload:{
+                comment_body:$body,
+                author:$author,
+                repo:$repo,
+                pr_number:$pr_number
+              }
+            }')
 
           curl -sf -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $QAGENT_PAT" \
             "https://api.github.com/repos/jrcosta/qagent/dispatches" \
-            -d "{\"event_type\":\"pr_comment_created\",\"client_payload\":$PAYLOAD}"
+            -d "$DISPATCH_PAYLOAD"
 
           echo "✅ Forwarded comment to qagent"
