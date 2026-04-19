@@ -93,6 +93,24 @@ Retorna um usuário pelo ID.
 
 ---
 
+### `GET /users/by-email?email={email}`
+
+Retorna um usuário pelo e-mail informado.
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `email` | string | sim | E-mail do usuário a buscar |
+
+**Response** `200`: `UserResponse`
+
+```json
+{ "id": 1, "name": "Ana Silva", "email": "ana@example.com" }
+```
+
+**Response** `404`: `{ "detail": "Usuário não encontrado" }`
+
+---
+
 ### `POST /users`
 
 Cria um novo usuário.
