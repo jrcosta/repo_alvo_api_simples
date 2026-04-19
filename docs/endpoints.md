@@ -1,6 +1,6 @@
 # Endpoints da API
 
-Todos os endpoints estão definidos em `app/api/routes.py`. A documentação interativa (Swagger) está disponível em `/docs` ao rodar o servidor.
+Todos os endpoints estão definidos em `python-api/app/api/routes.py`. A documentação interativa (Swagger) está disponível em `/docs` ao rodar o servidor.
 
 ---
 
@@ -67,6 +67,20 @@ Busca usuários cujo nome contenha o termo (case-insensitive).
 Retorna usuários cujo e-mail aparece mais de uma vez no sistema.
 
 **Response** `200`: `list[UserResponse]`
+
+---
+
+### `GET /users/email-domains` *(Java API)*
+
+Retorna a contagem de usuários por domínio de e-mail.
+
+**Response** `200`:
+```json
+{
+  "example.com": 2,
+  "empresa.com": 1
+}
+```
 
 ---
 

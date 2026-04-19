@@ -4,7 +4,7 @@ O projeto integra com a API pública [agify.io](https://api.agify.io) para estim
 
 ## Serviço
 
-Arquivo: `app/services/external_service.py`
+Arquivo: `python-api/app/services/external_service.py`
 
 ### `ExternalService.estimate_age(name: str) -> AgeEstimateResponse`
 
@@ -34,7 +34,7 @@ A API nunca lança exceção para o cliente — erros externos são tratados int
 
 ## Testes
 
-Os testes em `tests/test_external.py` usam `monkeypatch` para substituir o método `estimate_age`, evitando chamadas reais à API externa.
+Os testes em `python-api/tests/test_external.py` usam `monkeypatch` para substituir o método `estimate_age`, evitando chamadas reais à API externa.
 
 ```python
 # Exemplo de mock

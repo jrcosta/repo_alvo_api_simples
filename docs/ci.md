@@ -26,7 +26,7 @@ O workflow roda os testes em duas versões do Python:
 
 1. **Checkout** — clona o repositório
 2. **Setup Python** — instala a versão do Python
-3. **Install dependencies** — `pip install -r requirements.txt`
+3. **Install dependencies** — `pip install -r python-api/requirements.txt` (o workflow executa com `working-directory: python-api`)
 4. **Run tests** — `pytest -q`
 
 ### Exemplo de Uso
