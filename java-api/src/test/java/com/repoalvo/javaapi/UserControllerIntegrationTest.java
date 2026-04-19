@@ -12,10 +12,12 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -29,85 +31,129 @@ class UserControllerIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    @DisplayName("GET /users/names returns HTTP 200 and a JSON array of strings")
-    void getUserNamesShouldReturnStatus200AndJsonArrayOfStrings() throws Exception {
-        var mvcResult = mockMvc.perform(get("/users/names")
+    @DisplayName("GET /health returns 200 and status ok")
+    void getHealthShouldReturnStatusOk() throws Exception {
+        mockMvc.perform(get("/health")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andReturn();
-
-        String json = mvcResult.getResponse().getContentAsString();
-        List<String> names = objectMapper.readValue(json, new TypeReference<List<String>>() {
-        });
-
-        assertThat(names).isNotNull();
+                .andExpect(jsonPath("$.status").value("ok"));
     }
 
     @Test
-    @DisplayName("GET /users/names returns names sorted case-insensitively")
-    void getUserNamesShouldReturnNamesSortedIgnoringCase() throws Exception {
-        var mvcResult = mockMvc.perform(get("/users/names")
+    @DisplayName("GET /users returns 200 and list of users")
+    void getUsersShouldReturnListOfUsers() throws Exception {
+        var mvcResult = mockMvc.perform(get("/users")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andReturn();
 
         String json = mvcResult.getResponse().getContentAsString();
-        List<String> names = objectMapper.readValue(json, new TypeReference<List<String>>() {
+        List<Map<String, Object>> users = objectMapper.readValue(json, new TypeReference<>() {
         });
 
-        for (int i = 1; i < names.size(); i++) {
-            String prev = names.get(i - 1);
-            String curr = names.get(i);
-            assertThat(prev.compareToIgnoreCase(curr)).isLessThanOrEqualTo(0);
+        assertThat(users).isNotEmpty();
+        assertThat(users.get(0)).containsKeys("id", "name", "email");
+    }
+
+    @Test
+    @DisplayName("GET /users/count returns 200 and count of users")
+    void getUsersCountShouldReturnCount() throws Exception {
+        var mvcResult = mockMvc.perform(get("/users/count")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String json = mvcResult.getResponse().getContentAsString();
+        Map<String, Integer> countResponse = objectMapper.readValue(json, new TypeReference<>() {
+        });
+
+        assertThat(countResponse).containsKey("count");
+        assertThat(countResponse.get("count")).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("GET /users/search?q= returns filtered users")
+    void getUsersSearchShouldReturnFilteredUsers() throws Exception {
+        var mvcResult = mockMvc.perform(get("/users/search")
+                        .param("q", "ana")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String json = mvcResult.getResponse().getContentAsString();
+        List<Map<String, Object>> users = objectMapper.readValue(json, new TypeReference<>() {
+        });
+
+        assertThat(users).isNotEmpty();
+        for (Map<String, Object> user : users) {
+            String name = (String) user.get("name");
+            assertThat(name.toLowerCase()).contains("ana");
         }
     }
 
     @Test
-    @DisplayName("GET /users/names returns a flat JSON array of strings, not user objects")
-    void getUserNamesShouldReturnFlatStringArray() throws Exception {
-        var mvcResult = mockMvc.perform(get("/users/names")
+    @DisplayName("GET /users/duplicates returns users with duplicate emails")
+    void getUsersDuplicatesShouldReturnDuplicates() throws Exception {
+        var mvcResult = mockMvc.perform(get("/users/duplicates")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andReturn();
 
         String json = mvcResult.getResponse().getContentAsString();
-
-        assertThat(json.trim()).startsWith("[");
-        assertThat(json.trim()).endsWith("]");
-
-        List<String> names = objectMapper.readValue(json, new TypeReference<List<String>>() {
+        List<Map<String, Object>> duplicates = objectMapper.readValue(json, new TypeReference<>() {
         });
-        assertThat(names).allSatisfy(name -> assertThat(name).isNotNull().isNotEmpty());
+
+        // The list may be empty or contain duplicates, just verify structure
+        for (Map<String, Object> user : duplicates) {
+            assertThat(user).containsKeys("id", "name", "email");
+        }
     }
 
     @Test
-    @DisplayName("GET /users/names reflects a user created via POST /users")
-    @DirtiesContext
-    void getUserNamesShouldReflectNewlyCreatedUsers() throws Exception {
-        String uniqueEmail = "integration-test-names@example.com";
-        String uniqueName = "Integration Test User";
+    @DisplayName("GET /users/1 returns 200 and the expected user")
+    void getUserByIdShouldReturnUser() throws Exception {
+        mockMvc.perform(get("/users/1")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.name").value("Ana Silva"))
+                .andExpect(jsonPath("$.email").value("ana@example.com"));
+    }
 
-        String createPayload = """
-                {
-                  "name": "%s",
-                  "email": "%s"
-                }
-                """.formatted(uniqueName, uniqueEmail);
+    @Test
+    @DisplayName("GET /users/9999 returns 404 when user does not exist")
+    void getUserByIdShouldReturn404WhenNotFound() throws Exception {
+        mockMvc.perform(get("/users/9999")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /users returns 201 and the created user")
+    @DirtiesContext
+    void postUserShouldReturnCreatedUser() throws Exception {
+        String payload = """
+                {"name": "Carlos Souza", "email": "carlos.souza@example.com"}
+                """;
 
         mockMvc.perform(post("/users")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(createPayload))
-                .andExpect(status().isCreated());
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Carlos Souza"))
+                .andExpect(jsonPath("$.email").value("carlos.souza@example.com"));
+    }
 
-        var getResult = mockMvc.perform(get("/users/names")
-                        .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andReturn();
+    @Test
+    @DisplayName("POST /users returns 409 CONFLICT when email already exists")
+    void postUserShouldReturn409WhenEmailAlreadyExists() throws Exception {
+        String payload = """
+                {"name": "Ana Clone", "email": "ana@example.com"}
+                """;
 
-        String json = getResult.getResponse().getContentAsString();
-        List<String> names = objectMapper.readValue(json, new TypeReference<List<String>>() {
-        });
-
-        assertThat(names).contains(uniqueName);
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isConflict());
     }
 }
