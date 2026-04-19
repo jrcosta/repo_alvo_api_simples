@@ -44,3 +44,8 @@ def test_create_user_duplicate_email_returns_409() -> None:
     # Attempt to create a second user with the same email
     response = client.post("/users", json={"name": "User Two", "email": "duplicate@example.com"})
     assert response.status_code == 409
+
+def test_create_user_unique_email_returns_201() -> None:
+    """Test that creating a user with a unique email returns a 201 status."""
+    response = client.post("/users", json={"name": "Unique User", "email": "unique@example.com"})
+    assert response.status_code == 201
