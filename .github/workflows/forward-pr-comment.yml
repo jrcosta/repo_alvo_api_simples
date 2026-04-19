@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Forward to qagent via repository_dispatch
         env:
-          QAGENT_PAT: ${{ secrets.QAGENT_DISPATCH_PAT }}
+          QAGENT_PAT: ${{ secrets.QAGENT_PAT }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           REPOSITORY_NAME: ${{ github.repository }}
