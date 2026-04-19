@@ -1,6 +1,6 @@
 # Testes
 
-O projeto usa [pytest](https://docs.pytest.org/) como framework de testes. Todos os testes estão na pasta `tests/`.
+O projeto usa [pytest](https://docs.pytest.org/) como framework de testes. Todos os testes da API Python estão na pasta `python-api/tests/`.
 
 ## Como Rodar
 
@@ -16,15 +16,15 @@ pytest -q
 pytest -v
 
 # Rodar apenas um arquivo
-pytest tests/test_api.py -v
+pytest python-api/tests/test_api.py -v
 
 # Rodar um teste específico
-pytest tests/test_api.py::test_healthcheck_returns_ok -v
+pytest python-api/tests/test_api.py::test_healthcheck_returns_ok -v
 ```
 
 ## Estrutura dos Testes
 
-### `tests/test_api.py` — Testes Unitários
+### `python-api/tests/test_api.py` — Testes Unitários
 
 | Teste | Endpoint | O que valida |
 |---|---|---|
@@ -41,7 +41,7 @@ pytest tests/test_api.py::test_healthcheck_returns_ok -v
 | `test_duplicates_returns_users_with_same_email` | `GET /users/duplicates` | Detecta emails duplicados corretamente |
 | `test_duplicates_returns_valid_user_objects` | `GET /users/duplicates` | Objetos retornados têm campos id, name, email |
 
-### `tests/test_external.py` — Testes com Mock
+### `python-api/tests/test_external.py` — Testes com Mock
 
 | Teste | O que valida |
 |---|---|
@@ -49,7 +49,7 @@ pytest tests/test_api.py::test_healthcheck_returns_ok -v
 | `test_age_estimate_null_age` | Lida com `age=null` sem erro |
 | `test_age_estimate_user_not_found` | Retorna 404 para usuário inexistente |
 
-### `tests/test_integration.py` — Testes de Integração
+### `python-api/tests/test_integration.py` — Testes de Integração
 
 | Teste | Fluxo |
 |---|---|

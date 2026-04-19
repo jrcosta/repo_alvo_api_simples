@@ -1,6 +1,25 @@
 # Repo Alvo API Simples
 
-API REST em **FastAPI** criada para servir como repositório-alvo em testes com agentes de IA para QA e revisão técnica.
+Monorepo com **duas implementações equivalentes** da mesma API:
+
+- API Python/FastAPI (`python-api/`)
+- API Java/Spring Boot (`java-api/`)
+
+O projeto foi criado para servir como repositório-alvo em testes com agentes de IA para QA e revisão técnica.
+
+## Estrutura do Repositório
+
+```text
+repo_alvo_api_simples/
+├── python-api/          # API Python/FastAPI
+│   ├── app/
+│   ├── tests/
+│   ├── static/
+│   └── requirements.txt
+├── docs/                # Documentação geral e por contexto
+├── java-api/            # API Java/Spring Boot equivalente
+└── README.md
+```
 
 ## Início Rápido
 
@@ -11,14 +30,27 @@ cd repo_alvo_api_simples
 python -m venv .venv
 source .venv/bin/activate        # Linux/macOS
 # .venv\Scripts\Activate.ps1     # Windows PowerShell
-pip install -r requirements.txt
+pip install -r python-api/requirements.txt
+cd python-api
 
 # Rodar a API
 uvicorn app.main:app --reload
 
 # Rodar os testes
-pytest -q
+pytest -q tests
 ```
+
+## API Java (Spring Boot)
+
+```bash
+cd java-api
+mvn spring-boot:run
+
+# testes
+mvn test
+```
+
+A API Java sobe em `http://localhost:8080` por padrão.
 
 Acesse:
 
@@ -52,6 +84,7 @@ Acesse:
 | [Frontend](docs/frontend.md) | Interface web e como funciona |
 | [CI/CD](docs/ci.md) | GitHub Actions e pipeline de testes |
 | [Integração Externa](docs/integracao-externa.md) | API agify.io, tratamento de erros, limitações |
+| [API Java](docs/java-api.md) | Organização, execução e testes da implementação Spring Boot |
 
 ## Objetivo
 

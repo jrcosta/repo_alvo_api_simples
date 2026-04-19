@@ -8,53 +8,55 @@ O **Repo Alvo API Simples** é uma API REST construída com [FastAPI](https://fa
 
 ```text
 repo_alvo_api_simples/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                  # Entrada da aplicação FastAPI
-│   ├── schemas.py               # Modelos Pydantic (request/response)
-│   ├── api/
+├── python-api/
+│   ├── app/
 │   │   ├── __init__.py
-│   │   └── routes.py            # Definição de todos os endpoints
-│   └── services/
-│       ├── __init__.py
-│       ├── user_service.py      # Lógica de negócio para usuários
-│       └── external_service.py  # Integração com APIs externas (agify.io)
-├── static/
-│   └── index.html               # Frontend simples (HTML/CSS/JS)
-├── tests/
-│   ├── test_api.py              # Testes unitários dos endpoints
-│   ├── test_external.py         # Testes da integração externa (com mock)
-│   └── test_integration.py      # Testes de integração (fluxos completos)
+│   │   ├── main.py                  # Entrada da aplicação FastAPI
+│   │   ├── schemas.py               # Modelos Pydantic (request/response)
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   └── routes.py            # Definição de todos os endpoints
+│   │   └── services/
+│   │       ├── __init__.py
+│   │       ├── user_service.py      # Lógica de negócio para usuários
+│   │       └── external_service.py  # Integração com APIs externas (agify.io)
+│   ├── static/
+│   │   └── index.html               # Frontend simples (HTML/CSS/JS)
+│   ├── tests/
+│   │   ├── test_api.py              # Testes unitários dos endpoints
+│   │   ├── test_external.py         # Testes da integração externa (com mock)
+│   │   └── test_integration.py      # Testes de integração (fluxos completos)
+│   └── requirements.txt
 ├── docs/                        # Documentação do projeto
+├── java-api/                    # Implementação equivalente em Spring Boot
 ├── .github/
 │   └── workflows/
 │       └── python-tests.yml     # CI com GitHub Actions
-├── requirements.txt
 ├── AGENTS.md                    # Diretrizes para agentes de IA
 └── README.md
 ```
 
 ## Camadas
 
-### 1. Entrada (`app/main.py`)
+### 1. Entrada (`python-api/app/main.py`)
 
 - Instancia o `FastAPI`
 - Inclui o router de rotas
 - Monta os arquivos estáticos (`/static`)
 - Serve o frontend na rota raiz (`/`)
 
-### 2. Rotas (`app/api/routes.py`)
+### 2. Rotas (`python-api/app/api/routes.py`)
 
 - Define todos os endpoints REST
 - Faz validação de entrada via `response_model` e `Query`
 - Delega lógica de negócio aos serviços
 
-### 3. Serviços (`app/services/`)
+### 3. Serviços (`python-api/app/services/`)
 
 - **`UserService`**: armazena usuários em memória (lista Python), oferece operações CRUD
 - **`ExternalService`**: encapsula chamadas HTTP à API pública [agify.io](https://api.agify.io)
 
-### 4. Schemas (`app/schemas.py`)
+### 4. Schemas (`python-api/app/schemas.py`)
 
 - Modelos Pydantic v2 para validação e serialização
 - Garantem contratos entre cliente e API
