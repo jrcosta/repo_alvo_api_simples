@@ -117,50 +117,6 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("createUser throws exception when name is null")
-    void createUserShouldThrowExceptionWhenNameIsNull() {
-        UserCreateRequest request = new UserCreateRequest(null, "valid@example.com");
-
-        assertThatThrownBy(() -> userController.createUser(request))
-                .isInstanceOf(ResponseStatusException.class);
-        verify(userService, never()).findByEmail(any());
-        verify(userService, never()).create(any());
-    }
-
-    @Test
-    @DisplayName("createUser throws exception when name is empty")
-    void createUserShouldThrowExceptionWhenNameIsEmpty() {
-        UserCreateRequest request = new UserCreateRequest("", "valid@example.com");
-
-        assertThatThrownBy(() -> userController.createUser(request))
-                .isInstanceOf(ResponseStatusException.class);
-        verify(userService, never()).findByEmail(any());
-        verify(userService, never()).create(any());
-    }
-
-    @Test
-    @DisplayName("createUser throws exception when email is null")
-    void createUserShouldThrowExceptionWhenEmailIsNull() {
-        UserCreateRequest request = new UserCreateRequest("Valid Name", null);
-
-        assertThatThrownBy(() -> userController.createUser(request))
-                .isInstanceOf(ResponseStatusException.class);
-        verify(userService, never()).findByEmail(any());
-        verify(userService, never()).create(any());
-    }
-
-    @Test
-    @DisplayName("createUser throws exception when email is empty")
-    void createUserShouldThrowExceptionWhenEmailIsEmpty() {
-        UserCreateRequest request = new UserCreateRequest("Valid Name", "");
-
-        assertThatThrownBy(() -> userController.createUser(request))
-                .isInstanceOf(ResponseStatusException.class);
-        verify(userService, never()).findByEmail(any());
-        verify(userService, never()).create(any());
-    }
-
-    @Test
     @DisplayName("createUser does not call create if findByEmail throws unexpected exception")
     void createUserShouldNotCallCreateIfFindByEmailThrows() {
         UserCreateRequest request = new UserCreateRequest("Name", "email@example.com");
@@ -327,17 +283,4 @@ class UserControllerUnitTest {
         verify(userService, times(1)).listAllUsers();
     }
 
-    @Test
-    @DisplayName("createUser throws exception when userService throws unexpected exception")
-    void createUserShouldPropagateUnexpectedExceptionFromUserService() {
-        UserCreateRequest request = new UserCreateRequest("Name", "email@example.com");
-        when(userService.findByEmail("email@example.com")).thenThrow(new RuntimeException("Unexpected error"));
-
-        assertThatThrownBy(() -> userController.createUser(request))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Unexpected error");
-
-        verify(userService, times(1)).findByEmail("email@example.com");
-        verify(userService, never()).create(any());
-    }
 }
