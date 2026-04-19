@@ -45,6 +45,10 @@ def test_create_user_integration() -> None:
     """Test the full cycle of creating a user."""
     response = client.post("/users", json={"name": "New User", "email": "newuser@example.com"})
     assert response.status_code == 201
+    created = response.json()
+    assert created["name"] == "New User"
+    assert created["email"] == "newuser@example.com"
+    assert isinstance(created["id"], int)
 
     response = client.get("/users")
     assert response.status_code == 200
@@ -59,6 +63,7 @@ def test_create_user_duplicate_email_integration() -> None:
 
     response = client.post("/users", json={"name": "User Two", "email": "duplicate@example.com"})
     assert response.status_code == 409
+    assert response.json().get("detail") == "E-mail já cadastrado"
 
 
 def test_create_multiple_users_integration() -> None:
