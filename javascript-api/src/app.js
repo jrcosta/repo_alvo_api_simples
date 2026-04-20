@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const userRoutes = require('./routes/users');
+const pingRoutes = require('./routes/ping');
 
 const app = express();
 
@@ -12,5 +13,6 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/users', userRoutes);
+app.use('/ping', pingRoutes);
 
 module.exports = app;
