@@ -8,4 +8,47 @@ describe('Ping Endpoint', () => {
     expect(response.body).toHaveProperty('message', 'pong');
     expect(response.body).toHaveProperty('timestamp');
   });
+
+  it('should return Content-Type application/json header', async () => {
+    const response = await request(app).get('/ping');
+    expect(response.headers['content-type']).toMatch(/application\/json/);
+  });
+
+  it('should return a valid ISO 8601 timestamp string in the response', async () => {
+    const response = await request(app).get('/ping');
+    expect(response.body).toHaveProperty('timestamp');
+    const timestamp = response.body.timestamp;
+    // Validate ISO 8601 format by attempting to parse date
+    const date = new Date(timestamp);
+    expect(date.toISOString()).toBe(timestamp);
+  });
+
+  it('should return a recent timestamp within the last 5 seconds', async () => {
+    const response = await request(app).get('/ping');
+    const timestamp = response.body.timestamp;
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffSeconds = (now.getTime() - date.getTime()) / 1000;
+    expect(diffSeconds).toBeGreaterThanOrEqual(0);
+    expect(diffSeconds).toBeLessThanOrEqual(5);
+  });
+
+  it.each(['post', 'put', 'delete', 'patch'])(
+    'should return 405 Method Not Allowed for HTTP %s method',
+    async (method) => {
+      const response = await request(app)[method]('/ping');
+      expect([404, 405]).toContain(response.statusCode);
+    }
+  );
+
+  it('should handle multiple sequential GET requests with consistent responses', async () => {
+    for (let i = 0; i < 5; i++) {
+      const response = await request(app).get('/ping');
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toHaveProperty('message', 'pong');
+      expect(response.body).toHaveProperty('timestamp');
+      const date = new Date(response.body.timestamp);
+      expect(date.toISOString()).toBe(response.body.timestamp);
+    }
+  });
 });
