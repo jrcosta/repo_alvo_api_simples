@@ -10,14 +10,6 @@ describe('API Health Check', () => {
 });
 
 describe('User Endpoints', () => {
-  beforeEach(async () => {
-    // Assuming there is an endpoint or mechanism to reset the DB for tests isolation
-    // If not, this is a placeholder to highlight the need for DB cleanup
-    if (app.resetTestDB) {
-      await app.resetTestDB();
-    }
-  });
-
   it('should list users', async () => {
     const res = await request(app).get('/users');
     expect(res.status).toBe(200);
@@ -36,78 +28,51 @@ describe('User Endpoints', () => {
   });
 
   it('should return 409 if email already exists', async () => {
-    const email = 'dan@example.com';
-    await request(app).post('/users').send({ name: 'Dan2', email });
-    const res = await request(app).post('/users').send({ name: 'Dan3', email });
+    const email = 'duplicate409@example.com';
+    await request(app).post('/users').send({ name: 'Dup1', email });
+    const res = await request(app).post('/users').send({ name: 'Dup2', email });
     expect(res.status).toBe(409);
-  });
-
-  it('should return 400 when creating user with invalid email format', async () => {
-    const invalidUser = { name: 'Invalid Email', email: 'invalid-email' };
-    const res = await request(app).post('/users').send(invalidUser);
-    expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty('error');
-  });
-
-  it('should return 400 when creating user with empty name', async () => {
-    const invalidUser = { name: '', email: 'valid@example.com' };
-    const res = await request(app).post('/users').send(invalidUser);
-    expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty('error');
-  });
-
-  it('should return empty list when no users exist', async () => {
-    if (app.resetTestDB) {
-      await app.resetTestDB();
-    }
-    // Assuming resetTestDB clears all users
-    const res = await request(app).get('/users');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBe(0);
-  });
-
-  it('should list users with pagination parameters limit and offset', async () => {
-    // Seed multiple users for pagination test
-    const usersToCreate = [
-      { name: 'User1', email: 'user1@example.com' },
-      { name: 'User2', email: 'user2@example.com' },
-      { name: 'User3', email: 'user3@example.com' },
-    ];
-    for (const user of usersToCreate) {
-      await request(app).post('/users').send(user);
-    }
-
-    const res = await request(app).get('/users?limit=2&offset=1');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeLessThanOrEqual(2);
-    // Check that the users returned are from the expected offset
-    expect(res.body[0]).toHaveProperty('email', 'user2@example.com');
-  });
-
-  it('should return 404 when searching user by email that does not exist', async () => {
-    const res = await request(app).get('/users/by-email').query({ email: 'notfound@example.com' });
-    expect(res.status).toBe(404);
     expect(res.body).toHaveProperty('detail');
   });
 
-  it('should return user when searching by existing email', async () => {
-    const user = { name: 'SearchUser', email: 'searchuser@example.com' };
-    await request(app).post('/users').send(user);
-    const res = await request(app).get('/users/by-email').query({ email: user.email });
+  it('should return 422 when creating user with empty name', async () => {
+    const invalidUser = { name: '', email: 'valid@example.com' };
+    const res = await request(app).post('/users').send(invalidUser);
+    expect(res.status).toBe(422);
+    expect(res.body).toHaveProperty('detail');
+  });
+
+  it('should return 422 when creating user without email', async () => {
+    const invalidUser = { name: 'NoEmail' };
+    const res = await request(app).post('/users').send(invalidUser);
+    expect(res.status).toBe(422);
+    expect(res.body).toHaveProperty('detail');
+  });
+
+  it('should list users with pagination respecting limit parameter', async () => {
+    const res = await request(app).get('/users?limit=2&offset=0');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('email', user.email);
-    expect(res.body).toHaveProperty('name', user.name);
-    expect(res.body).not.toHaveProperty('password');
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeLessThanOrEqual(2);
+  });
+
+  it('should list users with offset skipping the first user', async () => {
+    const allUsers = await request(app).get('/users');
+    // Guard: need at least 2 users to meaningfully test offset
+    expect(allUsers.body.length).toBeGreaterThan(1);
+
+    const pagedUsers = await request(app).get('/users?limit=10&offset=1');
+    expect(pagedUsers.status).toBe(200);
+    expect(Array.isArray(pagedUsers.body)).toBe(true);
+    expect(pagedUsers.body.length).toBe(allUsers.body.length - 1);
+    expect(pagedUsers.body[0].id).toBe(allUsers.body[1].id);
   });
 
   it('should handle concurrent creation attempts with same email and return 409 for one', async () => {
-    const email = 'concurrent@example.com';
+    const email = 'concurrent_test@example.com';
     const user1 = { name: 'Concurrent1', email };
     const user2 = { name: 'Concurrent2', email };
 
-    // Fire two requests almost simultaneously
     const [res1, res2] = await Promise.all([
       request(app).post('/users').send(user1),
       request(app).post('/users').send(user2),

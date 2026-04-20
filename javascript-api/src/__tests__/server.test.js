@@ -14,13 +14,13 @@ describe('server.js', () => {
     jest.resetModules();
 
     // Mock console.log
-    consoleLogMock = jestMock.fn();
+    consoleLogMock = jest.fn();
     global.console.log = consoleLogMock;
 
     // Create a mock for app.listen
-    listenMock = jestMock.fn((port, cb) => {
+    listenMock = jest.fn((port, cb) => {
       if (cb) cb();
-      return { on: jestMock.fn() }; // simulate server object with on method
+      return { on: jest.fn() }; // simulate server object with on method
     });
 
     // Mock the './app' module to export an object with listen method
@@ -45,7 +45,8 @@ describe('server.js', () => {
     require('../server');
 
     expect(listenMock).toHaveBeenCalledTimes(1);
-    expect(listenMock).toHaveBeenCalledWith(4000, expect.any(Function));
+    // process.env.PORT is always a string; server.js passes it directly to listen
+    expect(listenMock).toHaveBeenCalledWith('4000', expect.any(Function));
     expect(consoleLogMock).toHaveBeenCalledWith('Server running on port 4000');
   });
 

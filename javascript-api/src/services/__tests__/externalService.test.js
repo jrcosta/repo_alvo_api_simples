@@ -133,8 +133,10 @@ describe('ExternalService.estimateAge', () => {
   });
 
   test('estimateAge handles null name gracefully', async () => {
-    // Since the method expects a string, passing null will cause encodeURIComponent to throw.
-    // We test that the method throws in this case (no catch inside method for this).
-    await expect(externalService.estimateAge(null)).rejects.toThrow();
+    // encodeURIComponent(null) returns 'null' (no throw); the axios mock is
+    // cleared and will return undefined, causing the catch block to run,
+    // which returns the fallback object.
+    const result = await externalService.estimateAge(null);
+    expect(result).toEqual({ name: null, age: null, count: 0 });
   });
 });

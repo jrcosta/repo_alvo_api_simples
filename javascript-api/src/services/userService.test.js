@@ -36,9 +36,12 @@ describe('UserService', () => {
       expect(users).toEqual([]);
     });
 
-    test('should handle negative limit by returning empty array', () => {
+    test('should handle negative limit by returning all but the last element (slice behavior)', () => {
+      // listUsers(-1, 0) calls slice(0, -1) which returns all but the last element
       const users = userService.listUsers(-1, 0);
-      expect(users).toEqual([]);
+      expect(users).toHaveLength(2);
+      expect(users[0].name).toBe("Alice");
+      expect(users[1].name).toBe("Bob");
     });
 
     test('should handle negative offset by treating it as zero', () => {

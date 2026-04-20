@@ -5,7 +5,6 @@ const dotenv = require('dotenv');
 const axios = require('axios');
 const { spawn } = require('child_process');
 const path = require('path');
-const jestMock = require('jest-mock');
 
 jest.mock('axios');
 jest.mock('child_process');
@@ -17,7 +16,6 @@ describe('Environment and Server Setup', () => {
   });
 
   test('dotenv loads environment variables correctly', () => {
-    // Assuming .env.test contains TEST_VAR=hello
     expect(process.env.TEST_VAR).toBeDefined();
     expect(process.env.TEST_VAR).toBe('hello');
   });
