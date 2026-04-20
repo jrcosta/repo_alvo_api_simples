@@ -14,21 +14,19 @@ describe('Ping Endpoint', () => {
     expect(response.headers['content-type']).toMatch(/application\/json/);
   });
 
-  it('should return a valid ISO 8601 timestamp string in the response', async () => {
+  it('should return a valid numeric Unix timestamp in the response', async () => {
     const response = await request(app).get('/ping');
     expect(response.body).toHaveProperty('timestamp');
     const timestamp = response.body.timestamp;
-    // Validate ISO 8601 format by attempting to parse date
-    const date = new Date(timestamp);
-    expect(date.toISOString()).toBe(timestamp);
+    expect(typeof timestamp).toBe('number');
+    expect(timestamp).toBeGreaterThan(0);
   });
 
   it('should return a recent timestamp within the last 5 seconds', async () => {
     const response = await request(app).get('/ping');
     const timestamp = response.body.timestamp;
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffSeconds = (now.getTime() - date.getTime()) / 1000;
+    const now = Date.now();
+    const diffSeconds = (now - timestamp) / 1000;
     expect(diffSeconds).toBeGreaterThanOrEqual(0);
     expect(diffSeconds).toBeLessThanOrEqual(5);
   });
@@ -47,8 +45,7 @@ describe('Ping Endpoint', () => {
       expect(response.statusCode).toBe(200);
       expect(response.body).toHaveProperty('message', 'pong');
       expect(response.body).toHaveProperty('timestamp');
-      const date = new Date(response.body.timestamp);
-      expect(date.toISOString()).toBe(response.body.timestamp);
+      expect(typeof response.body.timestamp).toBe('number');
     }
   });
 });

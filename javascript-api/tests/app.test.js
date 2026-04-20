@@ -1,7 +1,5 @@
 const request = require('supertest');
 const express = require('express');
-const cors = require('cors');
-const jestMock = require('jest-mock');
 
 jest.mock('../src/routes/users', () => {
   const express = require('express');
