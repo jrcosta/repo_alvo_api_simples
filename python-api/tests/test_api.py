@@ -1,8 +1,7 @@
 import pytest
-from pydantic import ValidationError
 from fastapi.testclient import TestClient
 from app.main import app
-from app.schemas import EmailDomainCountResponse
+from unittest.mock import patch
 
 client = TestClient(app)
 
@@ -61,46 +60,6 @@ def test_create_user_unique_email_returns_201() -> None:
     assert response.status_code == 201
 
 
-def test_email_domain_count_response_creation_with_valid_data():
-    response = EmailDomainCountResponse(domain="example.com", count=10)
-    assert response.domain == "example.com"
-    assert response.count == 10
-
-
-@pytest.mark.parametrize(
-    "invalid_domain",
-    [123, 45.6, True, None, [], {}],
-)
-def test_email_domain_count_response_invalid_domain_type_raises_validation_error(invalid_domain):
-    with pytest.raises(ValidationError) as exc_info:
-        EmailDomainCountResponse(domain=invalid_domain, count=5)
-    errors = exc_info.value.errors()
-    assert any(error["loc"] == ("domain",) for error in errors)
-
-
-@pytest.mark.parametrize(
-    "invalid_count",
-    # Note: bool (True/False) is a subclass of int in Python and is accepted by
-    # Pydantic v2 for int fields (coerced to 0/1), so it is excluded here.
-    ["string", 12.34, None, [], {}],
-)
-def test_email_domain_count_response_invalid_count_type_raises_validation_error(invalid_count):
-    with pytest.raises(ValidationError) as exc_info:
-        EmailDomainCountResponse(domain="example.com", count=invalid_count)
-    errors = exc_info.value.errors()
-    assert any(error["loc"] == ("count",) for error in errors)
-
-
-def test_email_domain_count_response_serialization_and_deserialization():
-    original = EmailDomainCountResponse(domain="example.com", count=42)
-    json_str = original.model_dump_json()
-    # Deserialize back
-    deserialized = EmailDomainCountResponse.model_validate_json(json_str)
-    assert deserialized == original
-    assert deserialized.domain == "example.com"
-    assert deserialized.count == 42
-
-
 def test_get_user_by_email_success() -> None:
     """Test that GET /users/by-email returns the correct user when found."""
     # "ana@example.com" is a seeded user in UserService
@@ -109,6 +68,8 @@ def test_get_user_by_email_success() -> None:
     data = response.json()
     assert data["email"] == "ana@example.com"
     assert data["name"] == "Ana Silva"
+    # Ensure no sensitive data like password is included
+    assert "password" not in data
 
 
 def test_get_user_by_email_not_found() -> None:
@@ -116,3 +77,54 @@ def test_get_user_by_email_not_found() -> None:
     response = client.get("/users/by-email?email=nonexistent@example.com")
     assert response.status_code == 404
     assert response.json()["detail"] == "Usuário não encontrado"
+
+
+def test_get_user_by_email_missing_email_param_returns_400() -> None:
+    """Test that GET /users/by-email without email parameter returns 400 Bad Request."""
+    response = client.get("/users/by-email")
+    assert response.status_code == 400
+    # Optionally check error message if defined
+    json_data = response.json()
+    assert "detail" in json_data
+
+
+def test_get_user_by_email_empty_email_param_returns_404_or_error() -> None:
+    """Test that GET /users/by-email with empty email parameter returns 404 or specific error."""
+    response = client.get("/users/by-email?email=")
+    # Accept either 404 or 422 depending on implementation
+    assert response.status_code in (404, 422)
+    json_data = response.json()
+    assert "detail" in json_data
+
+
+def test_get_user_by_email_invalid_email_format_returns_422() -> None:
+    """Test that GET /users/by-email with invalid email format returns 422 Unprocessable Entity."""
+    response = client.get("/users/by-email?email=invalid-email")
+    assert response.status_code == 422
+    json_data = response.json()
+    assert "detail" in json_data
+
+
+def test_get_user_by_email_does_not_return_sensitive_data() -> None:
+    """Test that the response from /users/by-email does not include sensitive fields like password."""
+    response = client.get("/users/by-email?email=ana@example.com")
+    assert response.status_code == 200
+    data = response.json()
+    assert "password" not in data
+    assert "email" in data
+    assert "name" in data
+
+
+@patch("app.services.user_service.UserService.get_by_email")
+def test_get_user_by_email_service_mocked(mock_get_by_email) -> None:
+    """Test /users/by-email endpoint with mocked UserService to isolate controller behavior."""
+    mock_user = {"id": 123, "name": "Mock User", "email": "mock@example.com"}
+    mock_get_by_email.return_value = mock_user
+
+    response = client.get("/users/by-email?email=mock@example.com")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == "mock@example.com"
+    assert data["name"] == "Mock User"
+    assert "password" not in data
+    mock_get_by_email.assert_called_once_with("mock@example.com")

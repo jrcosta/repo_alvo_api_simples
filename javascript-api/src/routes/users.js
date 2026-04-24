@@ -84,15 +84,33 @@ router.get('/:user_id/email', (req, res) => {
 });
 
 router.get('/by-email', (req, res) => {
-  const email = req.query.email;
-  if (!email) {
-    return res.status(400).json({ detail: "Parâmetro email é obrigatório" });
+  try {
+    const email = req.query.email;
+    if (!email) {
+      return res.status(400).json({ detail: "Parâmetro email é obrigatório" });
+    }
+    // Optional: trim email to avoid spaces issues
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return res.status(400).json({ detail: "Parâmetro email é obrigatório" });
+    }
+    // Optional: validate email format (basic regex)
+    // If invalid, return 404 to avoid exposing validation details
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      return res.status(404).json({ detail: "Usuário não encontrado" });
+    }
+
+    const user = userService.findByEmail(trimmedEmail);
+    if (!user) {
+      return res.status(404).json({ detail: "Usuário não encontrado" });
+    }
+    // Filter out sensitive fields if any
+    const { password, token, ...safeUser } = user;
+    return res.json(safeUser);
+  } catch (error) {
+    return res.status(500).json({ detail: "Erro interno do servidor" });
   }
-  const user = userService.findByEmail(email);
-  if (!user) {
-    return res.status(404).json({ detail: "Usuário não encontrado" });
-  }
-  return res.json(user);
 });
 
 router.get('/:user_id/age-estimate', async (req, res) => {
