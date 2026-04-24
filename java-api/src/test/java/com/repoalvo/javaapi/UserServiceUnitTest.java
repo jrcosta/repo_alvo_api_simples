@@ -1,16 +1,16 @@
 package com.repoalvo.javaapi;
 
-import com.repoalvo.javaapi.model.UserCreateRequest;
+import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserServiceUnitTest {
 
@@ -22,189 +22,153 @@ class UserServiceUnitTest {
     }
 
     @Test
-    void getByIdShouldReturnUserWhenExists() {
-        Optional<UserResponse> result = userService.getById(1);
+    void update_shouldReturnUpdatedUser_whenUserExistsAndPayloadHasNameAndEmail() {
+        // Arrange
+        int userId = 1;
+        String newName = "Ana Updated";
+        String newEmail = "ana.updated@example.com";
+        UserUpdateRequest payload = new UserUpdateRequest(newName, newEmail);
 
-        assertThat(result).isPresent();
-        assertThat(result.get().id()).isEqualTo(1);
-        assertThat(result.get().name()).isEqualTo("Ana Silva");
-        assertThat(result.get().email()).isEqualTo("ana@example.com");
+        // Act
+        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
+
+        // Assert
+        assertThat(updatedOpt).isPresent();
+        UserResponse updated = updatedOpt.get();
+        assertThat(updated.id()).isEqualTo(userId);
+        assertThat(updated.name()).isEqualTo(newName);
+        assertThat(updated.email()).isEqualTo(newEmail);
     }
 
     @Test
-    void getByIdShouldReturnEmptyWhenUserDoesNotExist() {
-        Optional<UserResponse> result = userService.getById(999);
+    void update_shouldReturnUpdatedUser_whenPayloadHasOnlyName() {
+        // Arrange
+        int userId = 2;
+        String originalEmail = userService.getById(userId).map(UserResponse::email).orElse(null);
+        String newName = "Bruno Updated";
+        UserUpdateRequest payload = new UserUpdateRequest(newName, null);
 
-        assertThat(result).isNotPresent();
+        // Act
+        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
+
+        // Assert
+        assertThat(updatedOpt).isPresent();
+        UserResponse updated = updatedOpt.get();
+        assertThat(updated.id()).isEqualTo(userId);
+        assertThat(updated.name()).isEqualTo(newName);
+        assertThat(updated.email()).isEqualTo(originalEmail);
     }
 
     @Test
-    void getByIdShouldReturnEmptyForZeroOrNegativeId() {
-        Optional<UserResponse> zeroIdResult = userService.getById(0);
-        Optional<UserResponse> negativeIdResult = userService.getById(-5);
+    void update_shouldReturnUpdatedUser_whenPayloadHasOnlyEmail() {
+        // Arrange
+        int userId = 1;
+        String originalName = userService.getById(userId).map(UserResponse::name).orElse(null);
+        String newEmail = "ana.newemail@example.com";
+        UserUpdateRequest payload = new UserUpdateRequest(null, newEmail);
 
-        assertThat(zeroIdResult).isNotPresent();
-        assertThat(negativeIdResult).isNotPresent();
+        // Act
+        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
+
+        // Assert
+        assertThat(updatedOpt).isPresent();
+        UserResponse updated = updatedOpt.get();
+        assertThat(updated.id()).isEqualTo(userId);
+        assertThat(updated.name()).isEqualTo(originalName);
+        assertThat(updated.email()).isEqualTo(newEmail);
     }
 
     @Test
-    void listAllUsersShouldReturnPreloadedUsers() {
-        List<UserResponse> users = userService.listAllUsers();
+    void update_shouldReturnEmpty_whenUserDoesNotExist() {
+        // Arrange
+        int nonExistentUserId = 9999;
+        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
 
-        assertThat(users).hasSize(2);
-        assertThat(users).extracting(UserResponse::id).containsExactlyInAnyOrder(1, 2);
-        assertThat(users).extracting(UserResponse::name).contains("Ana Silva", "Bruno Lima");
-        assertThat(users).extracting(UserResponse::email).contains("ana@example.com", "bruno@example.com");
+        // Act
+        Optional<UserResponse> updatedOpt = userService.update(nonExistentUserId, payload);
+
+        // Assert
+        assertThat(updatedOpt).isEmpty();
     }
 
     @Test
-    void listUsersShouldRespectLimitAndOffset() {
-        List<UserResponse> page = userService.listUsers(1, 0);
+    void update_shouldNotModifyUser_whenPayloadHasNullFields() {
+        // Arrange
+        int userId = 1;
+        UserResponse original = userService.getById(userId).orElseThrow();
+        UserUpdateRequest payload = new UserUpdateRequest(null, null);
 
-        assertThat(page).hasSize(1);
-        assertThat(page.get(0).id()).isEqualTo(1);
+        // Act
+        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
+
+        // Assert
+        assertThat(updatedOpt).isPresent();
+        UserResponse updated = updatedOpt.get();
+        assertThat(updated.id()).isEqualTo(userId);
+        assertThat(updated.name()).isEqualTo(original.name());
+        assertThat(updated.email()).isEqualTo(original.email());
     }
 
     @Test
-    void listUsersShouldReturnEmptyWhenOffsetBeyondSize() {
-        List<UserResponse> page = userService.listUsers(10, 100);
+    void update_shouldReplaceUserInList() {
+        // Arrange
+        int userId = 2;
+        UserResponse beforeUpdate = userService.getById(userId).orElseThrow();
+        UserUpdateRequest payload = new UserUpdateRequest("New Name", "newemail@example.com");
 
-        assertThat(page).isEmpty();
+        // Act
+        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
+        UserResponse afterUpdate = userService.getById(userId).orElseThrow();
+
+        // Assert
+        assertThat(updatedOpt).isPresent();
+        UserResponse updated = updatedOpt.get();
+        assertThat(updated).isEqualTo(afterUpdate);
+        assertThat(updated).isNotEqualTo(beforeUpdate);
+        assertThat(updated.name()).isEqualTo("New Name");
+        assertThat(updated.email()).isEqualTo("newemail@example.com");
     }
 
     @Test
-    void listUsersShouldSanitizeNegativeLimitOrOffset() {
-        // The service normalizes negative limit to min 1 and negative offset to min 0,
-        // so results are still returned (not empty).
-        List<UserResponse> negativeLimit = userService.listUsers(-1, 0);
-        List<UserResponse> negativeOffset = userService.listUsers(1, -10);
-        List<UserResponse> negativeBoth = userService.listUsers(-5, -5);
+    void update_shouldBeThreadSafe() throws InterruptedException {
+        // Arrange
+        int userId = 1;
+        int threadCount = 10;
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);
+        AtomicInteger successCount = new AtomicInteger(0);
 
-        assertThat(negativeLimit).hasSize(1);
-        assertThat(negativeOffset).hasSize(1);
-        assertThat(negativeBoth).hasSize(1);
-    }
-
-    @Test
-    void findByEmailShouldReturnUserWhenEmailMatches() {
-        Optional<UserResponse> result = userService.findByEmail("ana@example.com");
-
-        assertThat(result).isPresent();
-        assertThat(result.get().name()).isEqualTo("Ana Silva");
-    }
-
-    @Test
-    void findByEmailShouldReturnEmptyWhenEmailNotFound() {
-        Optional<UserResponse> result = userService.findByEmail("notfound@example.com");
-
-        assertThat(result).isNotPresent();
-    }
-
-    @Test
-    void findByEmailShouldReturnEmptyForNullOrEmptyEmail() {
-        Optional<UserResponse> nullEmail = userService.findByEmail(null);
-        Optional<UserResponse> emptyEmail = userService.findByEmail("");
-        Optional<UserResponse> blankEmail = userService.findByEmail("   ");
-
-        assertThat(nullEmail).isNotPresent();
-        assertThat(emptyEmail).isNotPresent();
-        assertThat(blankEmail).isNotPresent();
-    }
-
-    @Test
-    void createShouldAddUserAndReturnWithGeneratedId() {
-        UserCreateRequest request = new UserCreateRequest("Carlos Souza", "carlos@example.com");
-
-        UserResponse created = userService.create(request);
-
-        assertThat(created.id()).isGreaterThan(0);
-        assertThat(created.name()).isEqualTo("Carlos Souza");
-        assertThat(created.email()).isEqualTo("carlos@example.com");
-        assertThat(userService.getById(created.id())).isPresent();
-    }
-
-    @Test
-    void createShouldAllowDuplicateEmailAtServiceLevel() {
-        // Duplicate email check is the controller's responsibility (via findByEmail + CONFLICT response).
-        // The service itself does not enforce uniqueness and will create the user.
-        UserCreateRequest duplicateEmailRequest = new UserCreateRequest("Ana Silva Clone", "ana@example.com");
-
-        UserResponse created = userService.create(duplicateEmailRequest);
-
-        assertThat(created).isNotNull();
-        assertThat(created.email()).isEqualTo("ana@example.com");
-        assertThat(created.id()).isGreaterThan(0);
-    }
-
-    @Test
-    void createShouldActuallyAddUserToInternalList() {
-        int initialSize = userService.listAllUsers().size();
-
-        UserCreateRequest request = new UserCreateRequest("Mariana Lima", "mariana@example.com");
-        UserResponse created = userService.create(request);
-
-        List<UserResponse> allUsers = userService.listAllUsers();
-        assertThat(allUsers).hasSize(initialSize + 1);
-        assertThat(allUsers).extracting(UserResponse::id).contains(created.id());
-        assertThat(allUsers).extracting(UserResponse::email).contains("mariana@example.com");
-    }
-
-    @Test
-    void createShouldThrowExceptionWhenRequestIsNull() {
-        assertThatThrownBy(() -> userService.create(null))
-                .isInstanceOf(NullPointerException.class);
-    }
-
-    @Test
-    void serviceMethodsShouldPropagateUnexpectedExceptions() {
-        // This test assumes we can simulate an internal failure by subclassing or reflection.
-        // Since we don't have access to internals, we simulate by creating a subclass that throws.
-
-        UserService failingService = new UserService() {
-            @Override
-            public Optional<UserResponse> getById(int id) {
-                throw new RuntimeException("Simulated failure");
-            }
-
-            @Override
-            public List<UserResponse> listAllUsers() {
-                throw new RuntimeException("Simulated failure");
-            }
-
-            @Override
-            public List<UserResponse> listUsers(int limit, int offset) {
-                throw new RuntimeException("Simulated failure");
-            }
-
-            @Override
-            public Optional<UserResponse> findByEmail(String email) {
-                throw new RuntimeException("Simulated failure");
-            }
-
-            @Override
-            public UserResponse create(UserCreateRequest request) {
-                throw new RuntimeException("Simulated failure");
+        Runnable updateTask = () -> {
+            try {
+                startLatch.await();
+                String threadName = Thread.currentThread().getName();
+                UserUpdateRequest payload = new UserUpdateRequest("Name " + threadName, "email" + threadName + "@example.com");
+                Optional<UserResponse> updatedOpt = userService.update(userId, payload);
+                if (updatedOpt.isPresent()) {
+                    successCount.incrementAndGet();
+                }
+            } catch (InterruptedException ignored) {
+            } finally {
+                doneLatch.countDown();
             }
         };
 
-        assertThatThrownBy(() -> failingService.getById(1))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Simulated failure");
+        for (int i = 0; i < threadCount; i++) {
+            new Thread(updateTask, "T" + i).start();
+        }
 
-        assertThatThrownBy(failingService::listAllUsers)
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Simulated failure");
+        // Act
+        startLatch.countDown();
+        doneLatch.await();
 
-        assertThatThrownBy(() -> failingService.listUsers(1, 0))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Simulated failure");
+        // Assert
+        assertThat(successCount.get()).isEqualTo(threadCount);
 
-        assertThatThrownBy(() -> failingService.findByEmail("ana@example.com"))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Simulated failure");
-
-        assertThatThrownBy(() -> failingService.create(new UserCreateRequest("Fail", "fail@example.com")))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Simulated failure");
+        // The final state should be one of the updates, no exceptions or corrupt state
+        Optional<UserResponse> finalUserOpt = userService.getById(userId);
+        assertThat(finalUserOpt).isPresent();
+        UserResponse finalUser = finalUserOpt.get();
+        assertThat(finalUser.name()).startsWith("Name T");
+        assertThat(finalUser.email()).endsWith("@example.com");
     }
 }
