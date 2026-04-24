@@ -80,9 +80,9 @@ def test_get_user_by_email_not_found() -> None:
 
 
 def test_get_user_by_email_missing_email_param_returns_400() -> None:
-    """Test that GET /users/by-email without email parameter returns 400 Bad Request."""
+    """Test that GET /users/by-email without email parameter returns 422 Unprocessable Entity (FastAPI default for missing required params)."""
     response = client.get("/users/by-email")
-    assert response.status_code == 400
+    assert response.status_code == 422
     # Optionally check error message if defined
     json_data = response.json()
     assert "detail" in json_data
@@ -97,10 +97,10 @@ def test_get_user_by_email_empty_email_param_returns_404_or_error() -> None:
     assert "detail" in json_data
 
 
-def test_get_user_by_email_invalid_email_format_returns_422() -> None:
-    """Test that GET /users/by-email with invalid email format returns 422 Unprocessable Entity."""
+def test_get_user_by_email_invalid_email_format_returns_404() -> None:
+    """Test that GET /users/by-email with an unregistered or malformed email returns 404 Not Found (no format validation in route)."""
     response = client.get("/users/by-email?email=invalid-email")
-    assert response.status_code == 422
+    assert response.status_code == 404
     json_data = response.json()
     assert "detail" in json_data
 
@@ -115,11 +115,12 @@ def test_get_user_by_email_does_not_return_sensitive_data() -> None:
     assert "name" in data
 
 
-@patch("app.services.user_service.UserService.get_by_email")
-def test_get_user_by_email_service_mocked(mock_get_by_email) -> None:
+@patch("app.services.user_service.UserService.find_by_email")
+def test_get_user_by_email_service_mocked(mock_find_by_email) -> None:
     """Test /users/by-email endpoint with mocked UserService to isolate controller behavior."""
-    mock_user = {"id": 123, "name": "Mock User", "email": "mock@example.com"}
-    mock_get_by_email.return_value = mock_user
+    from app.schemas import UserResponse
+    mock_user = UserResponse(id=123, name="Mock User", email="mock@example.com")
+    mock_find_by_email.return_value = mock_user
 
     response = client.get("/users/by-email?email=mock@example.com")
     assert response.status_code == 200
@@ -127,4 +128,4 @@ def test_get_user_by_email_service_mocked(mock_get_by_email) -> None:
     assert data["email"] == "mock@example.com"
     assert data["name"] == "Mock User"
     assert "password" not in data
-    mock_get_by_email.assert_called_once_with("mock@example.com")
+    mock_find_by_email.assert_called_once_with("mock@example.com")

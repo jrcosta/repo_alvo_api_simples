@@ -72,13 +72,12 @@ describe('GET /users/by-email endpoint', () => {
     userService.findByEmail = originalFindByEmail;
   });
 
-  test('should handle email parameter with leading and trailing spaces by rejecting (400)', async () => {
-    // The current implementation does not trim, so spaces cause no user found
-    // So expected behavior is 404 (user not found)
+  test('should handle email parameter with leading and trailing spaces by finding user after trim', async () => {
+    // The implementation trims the email before lookup, so ' alice@example.com ' resolves to 'alice@example.com'
     const emailWithSpaces = ' alice@example.com ';
     const res = await request(app).get(`/users/by-email?email=${encodeURIComponent(emailWithSpaces)}`);
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ detail: "Usuário não encontrado" });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ id: 1, name: "Alice", email: "alice@example.com" });
   });
 
   test('should handle email parameter with valid special characters', async () => {
@@ -86,7 +85,8 @@ describe('GET /users/by-email endpoint', () => {
     const specialEmailUser = { id: 10, name: "Special", email: "user+tag@example.com" };
     userService.users.push(specialEmailUser);
 
-    const res = await request(app).get('/users/by-email?email=user+tag@example.com');
+    // The '+' sign must be percent-encoded as '%2B' in the URL, otherwise it's decoded as a space
+    const res = await request(app).get('/users/by-email?email=user%2Btag@example.com');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(specialEmailUser);
   });
