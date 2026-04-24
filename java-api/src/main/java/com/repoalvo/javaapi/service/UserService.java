@@ -1,6 +1,7 @@
 package com.repoalvo.javaapi.service;
 
 import com.repoalvo.javaapi.model.UserCreateRequest;
+import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.model.UserResponse;
 import org.springframework.stereotype.Service;
 
@@ -49,4 +50,19 @@ public class UserService {
         users.add(user);
         return user;
     }
+
+    public synchronized Optional<UserResponse> update(int userId, UserUpdateRequest payload) {
+        for (int i = 0; i < users.size(); i++) {
+            UserResponse existing = users.get(i);
+            if (existing.id() == userId) {
+                String updatedName = (payload.name() != null) ? payload.name() : existing.name();
+                String updatedEmail = (payload.email() != null) ? payload.email() : existing.email();
+                UserResponse updated = new UserResponse(existing.id(), updatedName, updatedEmail);
+                users.set(i, updated);
+                return Optional.of(updated);
+            }
+        }
+        return Optional.empty();
+    }
 }
+

@@ -29,6 +29,7 @@ A API sobe em `http://localhost:8080` por padrão.
   - `GET /users/{id}/email`
   - `GET /users/{id}/age-estimate`
   - `POST /users`
+  - `PUT /users/{id}` (atualização parcial: `name`, `email` ou ambos)
 
 ## Testes
 

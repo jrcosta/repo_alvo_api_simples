@@ -7,6 +7,7 @@ import com.repoalvo.javaapi.model.HealthResponse;
 import com.repoalvo.javaapi.model.UserCreateRequest;
 import com.repoalvo.javaapi.model.UserExistsResponse;
 import com.repoalvo.javaapi.model.UserResponse;
+import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
 import jakarta.validation.Valid;
@@ -16,6 +17,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -25,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -146,4 +149,22 @@ public class UserController {
         return userService.getById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
     }
+
+    @PutMapping("/users/{userId}")
+    public UserResponse updateUser(@PathVariable int userId, @Valid @RequestBody UserUpdateRequest payload) {
+        if (payload.name() == null && payload.email() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe ao menos um campo para atualizar");
+        }
+
+        if (payload.email() != null) {
+            Optional<UserResponse> existingWithEmail = userService.findByEmail(payload.email());
+            if (existingWithEmail.isPresent() && existingWithEmail.get().id() != userId) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "E-mail já cadastrado por outro usuário");
+            }
+        }
+
+        return userService.update(userId, payload)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
+    }
 }
+
