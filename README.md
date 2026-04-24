@@ -87,7 +87,7 @@ Acesse:
 | [Integração Externa](docs/integracao-externa.md) | API agify.io, tratamento de erros, limitações |
 | [API Java](docs/java-api.md) | Organização, execução e testes da implementação Spring Boot |
 
-## Objetivo
+##  :crossed_flags: Objetivo 
 
 Este repositório existe para:
 
