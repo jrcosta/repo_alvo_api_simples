@@ -33,3 +33,14 @@ class AgeEstimateResponse(BaseModel):
 class EmailDomainCountResponse(BaseModel):
     domain: str
     count: int
+
+
+class DiscountRequest(BaseModel):
+    base_price: float = Field(..., ge=0)
+    discount_percentage: float = Field(0.0, ge=0, le=100)
+    coupon_code: str | None = None
+    is_vip: bool = False
+
+
+class DiscountResponse(BaseModel):
+    final_price: float
