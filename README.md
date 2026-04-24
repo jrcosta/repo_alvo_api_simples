@@ -70,6 +70,7 @@ Acesse:
 | `GET` | `/users/search?q=` | Buscar por nome |
 | `GET` | `/users/duplicates` | Encontrar emails duplicados |
 | `GET` | `/users/{id}` | Buscar por ID |
+| `GET` | `/users/by-email` | Buscar por e-mail |
 | `GET` | `/users/{id}/email` | Email de um usuário |
 | `GET` | `/users/{id}/age-estimate` | Estimativa de idade (agify.io) |
 | `POST` | `/users` | Criar usuário |

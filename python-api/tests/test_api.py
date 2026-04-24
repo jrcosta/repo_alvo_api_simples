@@ -99,3 +99,20 @@ def test_email_domain_count_response_serialization_and_deserialization():
     assert deserialized == original
     assert deserialized.domain == "example.com"
     assert deserialized.count == 42
+
+
+def test_get_user_by_email_success() -> None:
+    """Test that GET /users/by-email returns the correct user when found."""
+    # "ana@example.com" is a seeded user in UserService
+    response = client.get("/users/by-email?email=ana@example.com")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == "ana@example.com"
+    assert data["name"] == "Ana Silva"
+
+
+def test_get_user_by_email_not_found() -> None:
+    """Test that GET /users/by-email returns 404 when the email is not found."""
+    response = client.get("/users/by-email?email=nonexistent@example.com")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Usuário não encontrado"
