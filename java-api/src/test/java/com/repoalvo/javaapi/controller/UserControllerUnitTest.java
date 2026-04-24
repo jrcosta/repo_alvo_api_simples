@@ -44,7 +44,7 @@ class UserControllerUnitTest {
         UserResponse result = userController.updateUser(userId, payload);
 
         assertThat(result).isEqualTo(updatedUser);
-        verify(userService, times(1)).findByEmail(null);
+        verify(userService, never()).findByEmail(any());
         verify(userService, times(1)).update(userId, payload);
     }
 
@@ -158,7 +158,7 @@ class UserControllerUnitTest {
         UserResponse result = userController.updateUser(userId, payload);
 
         assertThat(result).isEqualTo(updatedUser);
-        verify(userService, times(1)).findByEmail(null);
+        verify(userService, never()).findByEmail(any());
         verify(userService, times(1)).update(userId, payload);
     }
 
