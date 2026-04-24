@@ -99,6 +99,20 @@ def get_user_email(user_id: int) -> EmailResponse:
     return EmailResponse(email=user.email)
 
 
+@router.get("/users/by-email", response_model=UserResponse, tags=["users"])
+def get_user_by_email(email: str) -> UserResponse:
+    """Find a user by their exact email address."""
+    user = user_service.find_by_email(email)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+
+    return user
+
+
 @router.get("/users/search", response_model=list[UserResponse], tags=["users"])
 def search_users(q: str) -> list[UserResponse]:
     results: list[UserResponse] = []
