@@ -58,7 +58,7 @@ public class UserController {
 
     @GetMapping("/users/count")
     public CountResponse usersCount() {
-        return new CountResponse(userService.listAllUsers().size());
+        return new CountResponse(userService.listAllUsers().size(), "users");
     }
 
     @PostMapping("/users")
