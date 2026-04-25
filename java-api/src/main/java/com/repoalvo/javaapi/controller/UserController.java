@@ -7,6 +7,7 @@ import com.repoalvo.javaapi.model.HealthResponse;
 import com.repoalvo.javaapi.model.UserCreateRequest;
 import com.repoalvo.javaapi.model.UserExistsResponse;
 import com.repoalvo.javaapi.model.UserResponse;
+import com.repoalvo.javaapi.model.UserStatusSummaryResponse;
 import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
@@ -134,6 +135,15 @@ public class UserController {
                 .filter(email -> email.contains("@"))
                 .map(email -> email.substring(email.indexOf('@') + 1).toLowerCase())
                 .collect(Collectors.groupingBy(domain -> domain, Collectors.counting()));
+    }
+
+    @GetMapping("/users/status-summary")
+    public UserStatusSummaryResponse usersStatusSummary() {
+        Map<String, Long> statuses = userService.listAllUsers()
+                .stream()
+                .collect(Collectors.groupingBy(UserResponse::status, Collectors.counting()));
+
+        return new UserStatusSummaryResponse(statuses);
     }
 
     @GetMapping("/users/{userId}/age-estimate")
