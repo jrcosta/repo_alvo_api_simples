@@ -1,62 +1,91 @@
 import pytest
 from pydantic import ValidationError
-from app.schemas import DiscountRequest, DiscountResponse
+from app.schemas import CartItemSchema, CartRequest, CartResponse
 
 
-class TestDiscountRequestModel:
+class TestCartItemSchema:
 
-    def test_create_with_valid_values_should_succeed(self):
-        req = DiscountRequest(
-            base_price=100.0,
-            discount_percentage=10.0,
-            coupon_code="SAVE10",
-            is_vip=True
-        )
-        assert req.base_price == 100.0
-        assert req.discount_percentage == 10.0
-        assert req.coupon_code == "SAVE10"
-        assert req.is_vip is True
+    def test_create_with_valid_data_should_succeed(self):
+        item = CartItemSchema(id="item1", name="Item One", price=10.5, quantity=3)
+        assert item.id == "item1"
+        assert item.name == "Item One"
+        assert item.price == 10.5
+        assert item.quantity == 3
 
-    @pytest.mark.parametrize("base_price", [-0.01, -100, -1e10])
-    def test_create_with_negative_base_price_should_fail(self, base_price):
+    @pytest.mark.parametrize("price", [-0.01, -100, -1e10])
+    def test_create_with_negative_price_should_fail(self, price):
         with pytest.raises(ValidationError) as exc_info:
-            DiscountRequest(base_price=base_price)
+            CartItemSchema(id="item1", name="Item One", price=price, quantity=1)
         errors = exc_info.value.errors()
         assert any(e['loc'] == ('base_price',) and (e['type'] == 'greater_than_equal' or e['type'] == 'value_error.number.not_ge') for e in errors)
 
-    @pytest.mark.parametrize("discount_percentage", [-0.01, -1, 100.1, 150])
-    def test_create_with_discount_percentage_out_of_bounds_should_fail(self, discount_percentage):
+    @pytest.mark.parametrize("quantity", [0, -1, -100])
+    def test_create_with_zero_or_negative_quantity_should_fail(self, quantity):
         with pytest.raises(ValidationError) as exc_info:
-            DiscountRequest(base_price=10.0, discount_percentage=discount_percentage)
+            CartItemSchema(id="item1", name="Item One", price=10.0, quantity=quantity)
         errors = exc_info.value.errors()
         assert any(e['loc'] == ('discount_percentage',) and (e['type'] in ['greater_than_equal', 'less_than_equal', 'value_error.number.not_ge', 'value_error.number.not_le']) for e in errors)
 
-    @pytest.mark.parametrize("coupon_code", [None, "", " ", "ABC123", "!@#$%^&*()", "A" * 1000])
-    def test_coupon_code_accepts_various_values(self, coupon_code):
-        req = DiscountRequest(base_price=10.0, coupon_code=coupon_code)
-        assert req.coupon_code == coupon_code
+    def test_create_with_quantity_omitted_should_default_to_one(self):
+        item = CartItemSchema(id="item1", name="Item One", price=10.0)
+        assert item.quantity == 1
 
-    @pytest.mark.parametrize("is_vip", [True, False])
-    def test_is_vip_accepts_true_and_false(self, is_vip):
-        req = DiscountRequest(base_price=10.0, is_vip=is_vip)
-        assert req.is_vip is is_vip
+    @pytest.mark.parametrize("invalid_id", [None, "", "   "])
+    def test_create_with_empty_or_null_id_should_fail(self, invalid_id):
+        with pytest.raises(ValidationError) as exc_info:
+            CartItemSchema(id=invalid_id, name="Item One", price=10.0, quantity=1)
+        errors = exc_info.value.errors()
+        assert any(e['loc'] == ('id',) and e['type'] == 'value_error.missing' or e['type'] == 'value_error.str.min_length' or e['type'] == 'type_error.str' for e in errors)
 
-    def test_discount_percentage_defaults_to_zero_and_coupon_code_and_is_vip_defaults(self):
-        req = DiscountRequest(base_price=50.0)
-        assert req.discount_percentage == 0.0
+    @pytest.mark.parametrize("invalid_name", [None, "", "   "])
+    def test_create_with_empty_or_null_name_should_fail(self, invalid_name):
+        with pytest.raises(ValidationError) as exc_info:
+            CartItemSchema(id="item1", name=invalid_name, price=10.0, quantity=1)
+        errors = exc_info.value.errors()
+        assert any(e['loc'] == ('name',) and e['type'] == 'value_error.missing' or e['type'] == 'value_error.str.min_length' or e['type'] == 'type_error.str' for e in errors)
+
+
+class TestCartRequestSchema:
+
+    def test_create_with_multiple_valid_items_should_succeed(self):
+        items = [
+            CartItemSchema(id="item1", name="Item One", price=10.0, quantity=2),
+            CartItemSchema(id="item2", name="Item Two", price=5.5, quantity=1),
+        ]
+        req = CartRequest(items=items, coupon_code="DISCOUNT10", is_vip=True)
+        assert len(req.items) == 2
+        assert req.coupon_code == "DISCOUNT10"
+        assert req.is_vip is True
+
+    def test_create_with_empty_items_list_should_succeed(self):
+        # The model does not forbid empty list, so it should succeed
+        req = CartRequest(items=[])
+        assert req.items == []
         assert req.coupon_code is None
         assert req.is_vip is False
 
-    def test_base_price_zero_is_accepted(self):
-        req = DiscountRequest(base_price=0.0)
-        assert req.base_price == 0.0
+    @pytest.mark.parametrize("coupon_code", [None, "", "SAVE20"])
+    def test_coupon_code_accepts_none_empty_and_valid_string(self, coupon_code):
+        req = CartRequest(items=[CartItemSchema(id="item1", name="Item One", price=10.0)], coupon_code=coupon_code)
+        assert req.coupon_code == coupon_code
+
+    def test_is_vip_defaults_to_false_when_omitted(self):
+        req = CartRequest(items=[CartItemSchema(id="item1", name="Item One", price=10.0)])
+        assert req.is_vip is False
+
+    def test_is_vip_accepts_true_explicitly(self):
+        req = CartRequest(items=[CartItemSchema(id="item1", name="Item One", price=10.0)], is_vip=True)
+        assert req.is_vip is True
 
 
-class TestDiscountResponseModel:
+class TestCartResponseSchema:
 
-    def test_create_with_valid_final_price_should_succeed(self):
-        resp = DiscountResponse(final_price=99.99)
-        assert resp.final_price == 99.99
+    def test_create_with_typical_values_should_succeed(self):
+        resp = CartResponse(subtotal=100.0, tax_amount=10.0, final_price=110.0, items_count=3)
+        assert resp.subtotal == 100.0
+        assert resp.tax_amount == 10.0
+        assert resp.final_price == 110.0
+        assert resp.items_count == 3
 
     def test_serialization_and_deserialization(self):
         resp = DiscountResponse(final_price=123.45)
