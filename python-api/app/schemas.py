@@ -1,5 +1,5 @@
 from typing import List
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 
 class HealthResponse(BaseModel):
@@ -37,6 +37,7 @@ class EmailDomainCountResponse(BaseModel):
 
 
 class DiscountRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     base_price: float = Field(..., ge=0)
     discount_percentage: float = Field(0.0, ge=0, le=100)
     coupon_code: str | None = None
@@ -44,6 +45,7 @@ class DiscountRequest(BaseModel):
 
 
 class DiscountResponse(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     final_price: float
 
 

@@ -1,4 +1,4 @@
 package com.repoalvo.javaapi.model;
 
-public record UserResponse(int id, String name, String email) {
+public record UserResponse(int id, String name, String email, String status, String role) {
 }

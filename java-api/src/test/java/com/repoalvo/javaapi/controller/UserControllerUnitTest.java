@@ -37,7 +37,7 @@ class UserControllerUnitTest {
     void updateUserShouldUpdateNameOnlyAndReturnUser() {
         int userId = 1;
         UserUpdateRequest payload = new UserUpdateRequest("New Name", null);
-        UserResponse updatedUser = new UserResponse(userId, "New Name", "oldemail@example.com");
+        UserResponse updatedUser = new UserResponse(userId, "New Name", "oldemail@example.com", "ACTIVE", "USER");
 
         when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
 
@@ -54,7 +54,7 @@ class UserControllerUnitTest {
         int userId = 2;
         String newEmail = "newemail@example.com";
         UserUpdateRequest payload = new UserUpdateRequest(null, newEmail);
-        UserResponse updatedUser = new UserResponse(userId, "Existing Name", newEmail);
+        UserResponse updatedUser = new UserResponse(userId, "Existing Name", newEmail, "ACTIVE", "USER");
 
         when(userService.findByEmail(newEmail)).thenReturn(Optional.empty());
         when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
@@ -72,7 +72,7 @@ class UserControllerUnitTest {
         int userId = 3;
         String conflictingEmail = "conflict@example.com";
         UserUpdateRequest payload = new UserUpdateRequest(null, conflictingEmail);
-        UserResponse otherUser = new UserResponse(99, "Other User", conflictingEmail);
+        UserResponse otherUser = new UserResponse(99, "Other User", conflictingEmail, "ACTIVE", "USER");
 
         when(userService.findByEmail(conflictingEmail)).thenReturn(Optional.of(otherUser));
 
@@ -94,8 +94,8 @@ class UserControllerUnitTest {
         int userId = 4;
         String sameEmail = "sameuser@example.com";
         UserUpdateRequest payload = new UserUpdateRequest(null, sameEmail);
-        UserResponse sameUser = new UserResponse(userId, "Same User", sameEmail);
-        UserResponse updatedUser = new UserResponse(userId, "Same User Updated", sameEmail);
+        UserResponse sameUser = new UserResponse(userId, "Same User", sameEmail, "ACTIVE", "USER");
+        UserResponse updatedUser = new UserResponse(userId, "Same User Updated", sameEmail, "ACTIVE", "USER");
 
         when(userService.findByEmail(sameEmail)).thenReturn(Optional.of(sameUser));
         when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
@@ -151,7 +151,7 @@ class UserControllerUnitTest {
     void updateUserShouldHandlePayloadWithNullAndNonNullFields() {
         int userId = 7;
         UserUpdateRequest payload = new UserUpdateRequest("Valid Name", null);
-        UserResponse updatedUser = new UserResponse(userId, "Valid Name", "existing@example.com");
+        UserResponse updatedUser = new UserResponse(userId, "Valid Name", "existing@example.com", "ACTIVE", "USER");
 
         when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
 

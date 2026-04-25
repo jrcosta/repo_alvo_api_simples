@@ -30,7 +30,7 @@ class UserControllerTest {
     @DisplayName("userExists returns exists=true when userService.getById returns a user")
     void userExistsReturnsTrueWhenUserPresent() {
         int userId = 1;
-        UserResponse user = new UserResponse(userId, "Test User", "test@example.com");
+        UserResponse user = new UserResponse(userId, "Test User", "test@example.com", "ACTIVE", "USER");
         when(userService.getById(userId)).thenReturn(Optional.of(user));
 
         UserExistsResponse response = userController.userExists(userId);
@@ -120,7 +120,7 @@ class UserControllerTest {
     @DisplayName("userExists does not interact with externalService")
     void userExistsDoesNotCallExternalService() {
         int userId = 1;
-        UserResponse user = new UserResponse(userId, "Test User", "test@example.com");
+        UserResponse user = new UserResponse(userId, "Test User", "test@example.com", "ACTIVE", "USER");
         when(userService.getById(userId)).thenReturn(Optional.of(user));
 
         userController.userExists(userId);
