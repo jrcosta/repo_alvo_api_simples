@@ -1,5 +1,8 @@
 from fastapi import APIRouter, HTTPException, status, Query
 
+from app.services.external_service import ExternalService
+from app.services.user_service import UserService
+from app.services.discount_service import DiscountService
 from app.schemas import (
     HealthResponse,
     UserCreate,
@@ -8,13 +11,14 @@ from app.schemas import (
     EmailResponse,
     AgeEstimateResponse,
     EmailDomainCountResponse,
+    DiscountRequest,
+    DiscountResponse,
 )
-from app.services.external_service import ExternalService
-from app.services.user_service import UserService
 
 router = APIRouter()
 user_service = UserService()
 external_service = ExternalService()
+discount_service = DiscountService()
 
 
 @router.get("/health", response_model=HealthResponse, tags=["health"])
@@ -174,3 +178,21 @@ def get_user(user_id: int) -> UserResponse:
         )
 
     return user
+
+
+@router.post("/discounts/calculate", response_model=DiscountResponse, tags=["discounts"])
+def calculate_discount(payload: DiscountRequest) -> DiscountResponse:
+    """Calcula o desconto final para uma compra."""
+    try:
+        final_price = discount_service.calculate_final_price(
+            base_price=payload.base_price,
+            discount_percentage=payload.discount_percentage,
+            coupon_code=payload.coupon_code,
+            is_vip=payload.is_vip
+        )
+        return DiscountResponse(final_price=final_price)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
