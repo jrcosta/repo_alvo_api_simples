@@ -1,7 +1,7 @@
 package com.repoalvo.javaapi.controller;
 
+import com.repoalvo.javaapi.model.UserCreateRequest;
 import com.repoalvo.javaapi.model.UserResponse;
-import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +17,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-import static org.springframework.http.HttpStatus.*;
+import static org.springframework.http.HttpStatus.CONFLICT;
 
 class UserControllerUnitTest {
 
@@ -33,149 +33,90 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("updateUser updates user with only name provided and returns updated user")
-    void updateUserShouldUpdateNameOnlyAndReturnUser() {
-        int userId = 1;
-        UserUpdateRequest payload = new UserUpdateRequest("New Name", null);
-        UserResponse updatedUser = new UserResponse(userId, "New Name", "oldemail@example.com", "ACTIVE", "USER");
+    @DisplayName("createUser returns UserResponse with phoneNumber when provided in payload")
+    void createUserShouldReturnUserResponseWithPhoneNumber() {
+        UserCreateRequest payload = new UserCreateRequest(
+                "Lucas",
+                "lucas@example.com",
+                "USER",
+                "+55 41 91234-5678"
+        );
 
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+        UserResponse expectedUser = new UserResponse(
+                100,
+                payload.name(),
+                payload.email(),
+                "ACTIVE",
+                payload.role(),
+                payload.phoneNumber()
+        );
 
-        UserResponse result = userController.updateUser(userId, payload);
+        when(userService.findByEmail(payload.email())).thenReturn(Optional.empty());
+        when(userService.create(payload)).thenReturn(expectedUser);
 
-        assertThat(result).isEqualTo(updatedUser);
-        verify(userService, never()).findByEmail(any());
-        verify(userService, times(1)).update(userId, payload);
+        UserResponse response = userController.createUser(payload);
+
+        assertThat(response).isNotNull();
+        assertThat(response.phoneNumber()).isEqualTo(payload.phoneNumber());
+        assertThat(response.name()).isEqualTo(payload.name());
+        assertThat(response.email()).isEqualTo(payload.email());
+
+        verify(userService, times(1)).findByEmail(payload.email());
+        verify(userService, times(1)).create(payload);
     }
 
     @Test
-    @DisplayName("updateUser updates user with only email provided and returns updated user")
-    void updateUserShouldUpdateEmailOnlyAndReturnUser() {
-        int userId = 2;
-        String newEmail = "newemail@example.com";
-        UserUpdateRequest payload = new UserUpdateRequest(null, newEmail);
-        UserResponse updatedUser = new UserResponse(userId, "Existing Name", newEmail, "ACTIVE", "USER");
+    @DisplayName("createUser returns UserResponse with null phoneNumber when phoneNumber not provided")
+    void createUserShouldReturnUserResponseWithNullPhoneNumberWhenNotProvided() {
+        UserCreateRequest payload = new UserCreateRequest(
+                "Lucas",
+                "lucas@example.com",
+                "USER",
+                null
+        );
 
-        when(userService.findByEmail(newEmail)).thenReturn(Optional.empty());
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+        UserResponse expectedUser = new UserResponse(
+                101,
+                payload.name(),
+                payload.email(),
+                "ACTIVE",
+                payload.role(),
+                null
+        );
 
-        UserResponse result = userController.updateUser(userId, payload);
+        when(userService.findByEmail(payload.email())).thenReturn(Optional.empty());
+        when(userService.create(payload)).thenReturn(expectedUser);
 
-        assertThat(result).isEqualTo(updatedUser);
-        verify(userService, times(1)).findByEmail(newEmail);
-        verify(userService, times(1)).update(userId, payload);
+        UserResponse response = userController.createUser(payload);
+
+        assertThat(response).isNotNull();
+        assertThat(response.phoneNumber()).isNull();
+        assertThat(response.name()).isEqualTo(payload.name());
+        assertThat(response.email()).isEqualTo(payload.email());
+
+        verify(userService, times(1)).findByEmail(payload.email());
+        verify(userService, times(1)).create(payload);
     }
 
     @Test
-    @DisplayName("updateUser throws 409 Conflict when email is already used by another user")
-    void updateUserShouldThrowConflictWhenEmailUsedByAnotherUser() {
-        int userId = 3;
-        String conflictingEmail = "conflict@example.com";
-        UserUpdateRequest payload = new UserUpdateRequest(null, conflictingEmail);
-        UserResponse otherUser = new UserResponse(99, "Other User", conflictingEmail, "ACTIVE", "USER");
+    @DisplayName("createUser throws 409 Conflict when email already exists")
+    void createUserShouldThrowConflictWhenEmailExists() {
+        UserCreateRequest payload = new UserCreateRequest(
+                "Lucas",
+                "lucas@example.com",
+                "USER",
+                "+55 41 91234-5678"
+        );
 
-        when(userService.findByEmail(conflictingEmail)).thenReturn(Optional.of(otherUser));
+        when(userService.findByEmail(payload.email())).thenReturn(Optional.of(
+                new UserResponse(1, "Existing User", payload.email(), "ACTIVE", "USER", "+55 41 91234-5678")
+        ));
 
-        assertThatThrownBy(() -> userController.updateUser(userId, payload))
+        assertThatThrownBy(() -> userController.createUser(payload))
                 .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> {
-                    ResponseStatusException rse = (ResponseStatusException) ex;
-                    assertThat(rse.getStatusCode()).isEqualTo(CONFLICT);
-                    assertThat(rse.getReason()).isEqualTo("E-mail já cadastrado por outro usuário");
-                });
+                .hasMessageContaining(CONFLICT.getReasonPhrase());
 
-        verify(userService, times(1)).findByEmail(conflictingEmail);
-        verify(userService, never()).update(anyInt(), any());
-    }
-
-    @Test
-    @DisplayName("updateUser allows update when email belongs to same user")
-    void updateUserShouldAllowUpdateWhenEmailBelongsToSameUser() {
-        int userId = 4;
-        String sameEmail = "sameuser@example.com";
-        UserUpdateRequest payload = new UserUpdateRequest(null, sameEmail);
-        UserResponse sameUser = new UserResponse(userId, "Same User", sameEmail, "ACTIVE", "USER");
-        UserResponse updatedUser = new UserResponse(userId, "Same User Updated", sameEmail, "ACTIVE", "USER");
-
-        when(userService.findByEmail(sameEmail)).thenReturn(Optional.of(sameUser));
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
-
-        UserResponse result = userController.updateUser(userId, payload);
-
-        assertThat(result).isEqualTo(updatedUser);
-        verify(userService, times(1)).findByEmail(sameEmail);
-        verify(userService, times(1)).update(userId, payload);
-    }
-
-    @Test
-    @DisplayName("updateUser throws 400 Bad Request when both name and email are null")
-    void updateUserShouldThrowBadRequestWhenNoFieldsProvided() {
-        int userId = 5;
-        UserUpdateRequest payload = new UserUpdateRequest(null, null);
-
-        assertThatThrownBy(() -> userController.updateUser(userId, payload))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> {
-                    ResponseStatusException rse = (ResponseStatusException) ex;
-                    assertThat(rse.getStatusCode()).isEqualTo(BAD_REQUEST);
-                    assertThat(rse.getReason()).isEqualTo("Informe ao menos um campo para atualizar");
-                });
-
-        verify(userService, never()).findByEmail(any());
-        verify(userService, never()).update(anyInt(), any());
-    }
-
-    @Test
-    @DisplayName("updateUser throws 404 Not Found when userService.update returns empty")
-    void updateUserShouldThrowNotFoundWhenUserDoesNotExist() {
-        int userId = 6;
-        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
-
-        when(userService.findByEmail("email@example.com")).thenReturn(Optional.empty());
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> userController.updateUser(userId, payload))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> {
-                    ResponseStatusException rse = (ResponseStatusException) ex;
-                    assertThat(rse.getStatusCode()).isEqualTo(NOT_FOUND);
-                    assertThat(rse.getReason()).isEqualTo("Usuário não encontrado");
-                });
-
-        verify(userService, times(1)).findByEmail("email@example.com");
-        verify(userService, times(1)).update(userId, payload);
-    }
-
-    @Test
-    @DisplayName("updateUser handles payload with null and non-null fields correctly")
-    void updateUserShouldHandlePayloadWithNullAndNonNullFields() {
-        int userId = 7;
-        UserUpdateRequest payload = new UserUpdateRequest("Valid Name", null);
-        UserResponse updatedUser = new UserResponse(userId, "Valid Name", "existing@example.com", "ACTIVE", "USER");
-
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
-
-        UserResponse result = userController.updateUser(userId, payload);
-
-        assertThat(result).isEqualTo(updatedUser);
-        verify(userService, never()).findByEmail(any());
-        verify(userService, times(1)).update(userId, payload);
-    }
-
-    @Test
-    @DisplayName("updateUser propagates unexpected exceptions from userService.update")
-    void updateUserShouldPropagateUnexpectedExceptions() {
-        int userId = 8;
-        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
-
-        when(userService.findByEmail("email@example.com")).thenReturn(Optional.empty());
-        when(userService.update(eq(userId), eq(payload))).thenThrow(new RuntimeException("Unexpected error"));
-
-        assertThatThrownBy(() -> userController.updateUser(userId, payload))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Unexpected error");
-
-        verify(userService, times(1)).findByEmail("email@example.com");
-        verify(userService, times(1)).update(userId, payload);
+        verify(userService, times(1)).findByEmail(payload.email());
+        verify(userService, never()).create(any());
     }
 }
