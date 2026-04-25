@@ -17,8 +17,8 @@ public class UserService {
     private final AtomicInteger nextId = new AtomicInteger(3);
 
     public UserService() {
-        users.add(new UserResponse(1, "Ana Silva", "ana@example.com"));
-        users.add(new UserResponse(2, "Bruno Lima", "bruno@example.com"));
+        users.add(new UserResponse(1, "Ana Silva", "ana@example.com", "ACTIVE", "ADMIN"));
+        users.add(new UserResponse(2, "Bruno Lima", "bruno@example.com", "ACTIVE", "USER"));
     }
 
     public synchronized List<UserResponse> listUsers(int limit, int offset) {
@@ -46,7 +46,8 @@ public class UserService {
     }
 
     public synchronized UserResponse create(UserCreateRequest payload) {
-        UserResponse user = new UserResponse(nextId.getAndIncrement(), payload.name(), payload.email());
+        String role = (payload.role() != null) ? payload.role() : "USER";
+        UserResponse user = new UserResponse(nextId.getAndIncrement(), payload.name(), payload.email(), "ACTIVE", role);
         users.add(user);
         return user;
     }
@@ -57,7 +58,7 @@ public class UserService {
             if (existing.id() == userId) {
                 String updatedName = (payload.name() != null) ? payload.name() : existing.name();
                 String updatedEmail = (payload.email() != null) ? payload.email() : existing.email();
-                UserResponse updated = new UserResponse(existing.id(), updatedName, updatedEmail);
+                UserResponse updated = new UserResponse(existing.id(), updatedName, updatedEmail, existing.status(), existing.role());
                 users.set(i, updated);
                 return Optional.of(updated);
             }
