@@ -9,12 +9,14 @@ class HealthResponse(BaseModel):
 class UserCreate(BaseModel):
     name: str = Field(..., min_length=3, max_length=100)
     email: EmailStr
+    is_vip: bool = False
 
 
 class UserResponse(BaseModel):
     id: int
     name: str
     email: EmailStr
+    is_vip: bool = False
 
 
 class CountResponse(BaseModel):

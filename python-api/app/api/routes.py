@@ -124,8 +124,14 @@ def get_user_by_email(email: str) -> UserResponse:
 @router.get("/users/search", response_model=list[UserResponse], tags=["users"])
 def search_users(q: str) -> list[UserResponse]:
     results: list[UserResponse] = []
+    vip_only = q.lower().startswith("vip:")
+    term = q[4:] if vip_only else q
+
     for u in user_service.list_users():
-        if q.lower() in u.name.lower():
+        if vip_only and not u.is_vip:
+            continue
+
+        if term.lower() in u.name.lower():
             # Return the full UserResponse objects so the response_model is satisfied
             results.append(u)
 

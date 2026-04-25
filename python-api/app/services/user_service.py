@@ -4,8 +4,8 @@ from app.schemas import UserCreate, UserResponse
 class UserService:
     def __init__(self) -> None:
         self._users: list[UserResponse] = [
-            UserResponse(id=1, name="Ana Silva", email="ana@example.com"),
-            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com"),
+            UserResponse(id=1, name="Ana Silva", email="ana@example.com", is_vip=True),
+            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com", is_vip=False),
         ]
         self._next_id = 3
 
@@ -40,6 +40,7 @@ class UserService:
             id=self._next_id,
             name=payload.name,
             email=payload.email,
+            is_vip=payload.is_vip,
         )
         self._users.append(user)
         self._next_id += 1
@@ -48,7 +49,7 @@ class UserService:
     def reset(self) -> None:
         """Reinitialise the service to its original seeded state. Intended for use in tests."""
         self._users = [
-            UserResponse(id=1, name="Ana Silva", email="ana@example.com"),
-            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com"),
+            UserResponse(id=1, name="Ana Silva", email="ana@example.com", is_vip=True),
+            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com", is_vip=False),
         ]
         self._next_id = 3
