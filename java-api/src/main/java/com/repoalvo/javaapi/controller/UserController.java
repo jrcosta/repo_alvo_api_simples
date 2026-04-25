@@ -103,7 +103,7 @@ public class UserController {
 
     @GetMapping("/users/{userId}/exists")
     public UserExistsResponse userExists(@PathVariable int userId) {
-        return new UserExistsResponse(userService.getById(userId).isPresent());
+        return new UserExistsResponse(userService.getById(userId).isPresent(), userId);
     }
 
     @GetMapping("/users/search")
