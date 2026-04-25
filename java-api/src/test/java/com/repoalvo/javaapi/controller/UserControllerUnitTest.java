@@ -1,7 +1,9 @@
 package com.repoalvo.javaapi.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoalvo.javaapi.model.CountResponse;
 import com.repoalvo.javaapi.model.UserResponse;
-import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,173 +11,140 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Optional;
+import java.util.Collections;
+import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
-
-import static org.springframework.http.HttpStatus.*;
 
 class UserControllerUnitTest {
 
     private UserService userService;
     private ExternalService externalService;
     private UserController userController;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
         userService = mock(UserService.class);
         externalService = mock(ExternalService.class);
         userController = new UserController(userService, externalService);
+        objectMapper = new ObjectMapper();
     }
 
     @Test
-    @DisplayName("updateUser updates user with only name provided and returns updated user")
-    void updateUserShouldUpdateNameOnlyAndReturnUser() {
-        int userId = 1;
-        UserUpdateRequest payload = new UserUpdateRequest("New Name", null);
-        UserResponse updatedUser = new UserResponse(userId, "New Name", "oldemail@example.com", "ACTIVE", "USER");
+    @DisplayName("usersCount returns CountResponse with correct count and fixed 'users' label when list has multiple users")
+    void usersCountReturnsCorrectCountAndLabelForMultipleUsers() {
+        List<UserResponse> mockUsers = List.of(
+                new UserResponse(1, "Alice", "alice@example.com", "ACTIVE", "USER"),
+                new UserResponse(2, "Bob", "bob@example.com", "ACTIVE", "USER"),
+                new UserResponse(3, "Carol", "carol@example.com", "ACTIVE", "USER")
+        );
+        when(userService.listAllUsers()).thenReturn(mockUsers);
 
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+        CountResponse response = userController.usersCount();
 
-        UserResponse result = userController.updateUser(userId, payload);
-
-        assertThat(result).isEqualTo(updatedUser);
-        verify(userService, never()).findByEmail(any());
-        verify(userService, times(1)).update(userId, payload);
+        assertThat(response).isNotNull();
+        assertThat(response.count()).isEqualTo(mockUsers.size());
+        assertThat(response.type()).isEqualTo("users");
+        verify(userService, times(1)).listAllUsers();
     }
 
     @Test
-    @DisplayName("updateUser updates user with only email provided and returns updated user")
-    void updateUserShouldUpdateEmailOnlyAndReturnUser() {
-        int userId = 2;
-        String newEmail = "newemail@example.com";
-        UserUpdateRequest payload = new UserUpdateRequest(null, newEmail);
-        UserResponse updatedUser = new UserResponse(userId, "Existing Name", newEmail, "ACTIVE", "USER");
+    @DisplayName("usersCount returns CountResponse with count zero and fixed 'users' label when list is empty")
+    void usersCountReturnsZeroCountAndLabelForEmptyList() {
+        when(userService.listAllUsers()).thenReturn(Collections.emptyList());
 
-        when(userService.findByEmail(newEmail)).thenReturn(Optional.empty());
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+        CountResponse response = userController.usersCount();
 
-        UserResponse result = userController.updateUser(userId, payload);
-
-        assertThat(result).isEqualTo(updatedUser);
-        verify(userService, times(1)).findByEmail(newEmail);
-        verify(userService, times(1)).update(userId, payload);
+        assertThat(response).isNotNull();
+        assertThat(response.count()).isZero();
+        assertThat(response.type()).isEqualTo("users");
+        verify(userService, times(1)).listAllUsers();
     }
 
     @Test
-    @DisplayName("updateUser throws 409 Conflict when email is already used by another user")
-    void updateUserShouldThrowConflictWhenEmailUsedByAnotherUser() {
-        int userId = 3;
-        String conflictingEmail = "conflict@example.com";
-        UserUpdateRequest payload = new UserUpdateRequest(null, conflictingEmail);
-        UserResponse otherUser = new UserResponse(99, "Other User", conflictingEmail, "ACTIVE", "USER");
+    @DisplayName("usersCount serializes to JSON with fields 'count' and 'users' correctly")
+    void countResponseSerializesToJsonWithCountAndUsersFields() throws JsonProcessingException {
+        CountResponse countResponse = new CountResponse(5, "users");
 
-        when(userService.findByEmail(conflictingEmail)).thenReturn(Optional.of(otherUser));
+        String json = objectMapper.writeValueAsString(countResponse);
 
-        assertThatThrownBy(() -> userController.updateUser(userId, payload))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> {
-                    ResponseStatusException rse = (ResponseStatusException) ex;
-                    assertThat(rse.getStatusCode()).isEqualTo(CONFLICT);
-                    assertThat(rse.getReason()).isEqualTo("E-mail já cadastrado por outro usuário");
-                });
-
-        verify(userService, times(1)).findByEmail(conflictingEmail);
-        verify(userService, never()).update(anyInt(), any());
+        assertThat(json).contains("\"count\":5");
+        assertThat(json).contains("\"users\":\"users\"");
     }
 
     @Test
-    @DisplayName("updateUser allows update when email belongs to same user")
-    void updateUserShouldAllowUpdateWhenEmailBelongsToSameUser() {
-        int userId = 4;
-        String sameEmail = "sameuser@example.com";
-        UserUpdateRequest payload = new UserUpdateRequest(null, sameEmail);
-        UserResponse sameUser = new UserResponse(userId, "Same User", sameEmail, "ACTIVE", "USER");
-        UserResponse updatedUser = new UserResponse(userId, "Same User Updated", sameEmail, "ACTIVE", "USER");
+    @DisplayName("usersCount deserializes from JSON with fields 'count' and 'users' correctly")
+    void countResponseDeserializesFromJsonWithCountAndUsersFields() throws JsonProcessingException {
+        String json = "{\"count\":7,\"users\":\"users\"}";
 
-        when(userService.findByEmail(sameEmail)).thenReturn(Optional.of(sameUser));
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+        CountResponse response = objectMapper.readValue(json, CountResponse.class);
 
-        UserResponse result = userController.updateUser(userId, payload);
-
-        assertThat(result).isEqualTo(updatedUser);
-        verify(userService, times(1)).findByEmail(sameEmail);
-        verify(userService, times(1)).update(userId, payload);
+        assertThat(response).isNotNull();
+        assertThat(response.count()).isEqualTo(7);
+        assertThat(response.type()).isEqualTo("users");
     }
 
     @Test
-    @DisplayName("updateUser throws 400 Bad Request when both name and email are null")
-    void updateUserShouldThrowBadRequestWhenNoFieldsProvided() {
-        int userId = 5;
-        UserUpdateRequest payload = new UserUpdateRequest(null, null);
+    @DisplayName("usersCount returns CountResponse with correct count and label for large list")
+    void usersCountHandlesLargeUserListCorrectly() {
+        int largeCount = 1000;
+        List<UserResponse> largeList = Collections.nCopies(largeCount,
+                new UserResponse(1, "User", "user@example.com", "ACTIVE", "USER"));
+        when(userService.listAllUsers()).thenReturn(largeList);
 
-        assertThatThrownBy(() -> userController.updateUser(userId, payload))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> {
-                    ResponseStatusException rse = (ResponseStatusException) ex;
-                    assertThat(rse.getStatusCode()).isEqualTo(BAD_REQUEST);
-                    assertThat(rse.getReason()).isEqualTo("Informe ao menos um campo para atualizar");
-                });
+        CountResponse response = userController.usersCount();
 
-        verify(userService, never()).findByEmail(any());
-        verify(userService, never()).update(anyInt(), any());
+        assertThat(response).isNotNull();
+        assertThat(response.count()).isEqualTo(largeCount);
+        assertThat(response.type()).isEqualTo("users");
+        verify(userService, times(1)).listAllUsers();
     }
 
     @Test
-    @DisplayName("updateUser throws 404 Not Found when userService.update returns empty")
-    void updateUserShouldThrowNotFoundWhenUserDoesNotExist() {
-        int userId = 6;
-        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
+    @DisplayName("usersCount throws ResponseStatusException when userService.listAllUsers throws exception")
+    void usersCountHandlesExceptionFromUserService() {
+        when(userService.listAllUsers()).thenThrow(new RuntimeException("Database error"));
 
-        when(userService.findByEmail("email@example.com")).thenReturn(Optional.empty());
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> userController.updateUser(userId, payload))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(ex -> {
-                    ResponseStatusException rse = (ResponseStatusException) ex;
-                    assertThat(rse.getStatusCode()).isEqualTo(NOT_FOUND);
-                    assertThat(rse.getReason()).isEqualTo("Usuário não encontrado");
-                });
-
-        verify(userService, times(1)).findByEmail("email@example.com");
-        verify(userService, times(1)).update(userId, payload);
-    }
-
-    @Test
-    @DisplayName("updateUser handles payload with null and non-null fields correctly")
-    void updateUserShouldHandlePayloadWithNullAndNonNullFields() {
-        int userId = 7;
-        UserUpdateRequest payload = new UserUpdateRequest("Valid Name", null);
-        UserResponse updatedUser = new UserResponse(userId, "Valid Name", "existing@example.com", "ACTIVE", "USER");
-
-        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
-
-        UserResponse result = userController.updateUser(userId, payload);
-
-        assertThat(result).isEqualTo(updatedUser);
-        verify(userService, never()).findByEmail(any());
-        verify(userService, times(1)).update(userId, payload);
-    }
-
-    @Test
-    @DisplayName("updateUser propagates unexpected exceptions from userService.update")
-    void updateUserShouldPropagateUnexpectedExceptions() {
-        int userId = 8;
-        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
-
-        when(userService.findByEmail("email@example.com")).thenReturn(Optional.empty());
-        when(userService.update(eq(userId), eq(payload))).thenThrow(new RuntimeException("Unexpected error"));
-
-        assertThatThrownBy(() -> userController.updateUser(userId, payload))
+        assertThatThrownBy(() -> userController.usersCount())
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Unexpected error");
+                .hasMessageContaining("Database error");
 
-        verify(userService, times(1)).findByEmail("email@example.com");
-        verify(userService, times(1)).update(userId, payload);
+        verify(userService, times(1)).listAllUsers();
+    }
+
+    @Test
+    @DisplayName("usersCount response does not expose sensitive or unexpected fields")
+    void usersCountResponseExposesOnlyCountAndUsersFields() throws JsonProcessingException {
+        List<UserResponse> mockUsers = List.of(
+                new UserResponse(1, "Alice", "alice@example.com", "ACTIVE", "USER")
+        );
+        when(userService.listAllUsers()).thenReturn(mockUsers);
+
+        CountResponse response = userController.usersCount();
+
+        String json = objectMapper.writeValueAsString(response);
+
+        // Should contain only count and users fields
+        assertThat(json).contains("\"count\":1");
+        assertThat(json).contains("\"users\":\"users\"");
+        assertThat(json).doesNotContain("password");
+        assertThat(json).doesNotContain("email");
+        assertThat(json).doesNotContain("name");
+    }
+
+    @Test
+    @DisplayName("usersCount response field 'users' is never null or empty")
+    void usersCountResponseUsersFieldIsNeverNullOrEmpty() {
+        List<UserResponse> mockUsers = List.of(
+                new UserResponse(1, "Alice", "alice@example.com", "ACTIVE", "USER")
+        );
+        when(userService.listAllUsers()).thenReturn(mockUsers);
+
+        CountResponse response = userController.usersCount();
+
+        assertThat(response.type()).isNotNull().isNotEmpty();
+        assertThat(response.type()).isEqualTo("users");
     }
 }
