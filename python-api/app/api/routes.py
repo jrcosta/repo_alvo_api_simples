@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Query
 from app.services.external_service import ExternalService
 from app.services.user_service import UserService
 from app.services.discount_service import DiscountService
+from app.services.cart_service import CartService
 from app.schemas import (
     HealthResponse,
     UserCreate,
@@ -13,12 +14,15 @@ from app.schemas import (
     EmailDomainCountResponse,
     DiscountRequest,
     DiscountResponse,
+    CartRequest,
+    CartResponse,
 )
 
 router = APIRouter()
 user_service = UserService()
 external_service = ExternalService()
 discount_service = DiscountService()
+cart_service = CartService(discount_service=discount_service)
 
 
 @router.get("/health", response_model=HealthResponse, tags=["health"])
@@ -191,6 +195,25 @@ def calculate_discount(payload: DiscountRequest) -> DiscountResponse:
             is_vip=payload.is_vip
         )
         return DiscountResponse(final_price=final_price)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/cart/calculate", response_model=CartResponse, tags=["cart"])
+def calculate_cart(payload: CartRequest) -> CartResponse:
+    """Calcula o fechamento do carrinho de compras."""
+    try:
+        # Converte Pydantic models para dicts para o serviço
+        items_dict = [item.model_dump() for item in payload.items]
+        result = cart_service.calculate_cart_total(
+            items=items_dict,
+            coupon_code=payload.coupon_code,
+            is_vip=payload.is_vip
+        )
+        return CartResponse(**result)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
