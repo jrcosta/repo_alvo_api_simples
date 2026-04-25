@@ -1,131 +1,197 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+from app.api.routes import router
+from app.schemas import DiscountRequest, DiscountResponse
+from fastapi import FastAPI, status
+
+app = FastAPI()
+app.include_router(router)
 
 client = TestClient(app)
 
 
-def test_create_user_handles_empty_name_and_email() -> None:
-    """Test that Pydantic validation rejects empty name and email with 422."""
-    response = client.post("/users", json={"name": "", "email": ""})
-    assert response.status_code == 422
+def make_payload(
+    base_price=100.0,
+    discount_percentage=10.0,
+    coupon_code="SAVE10",
+    is_vip=False,
+):
+    return {
+        "base_price": base_price,
+        "discount_percentage": discount_percentage,
+        "coupon_code": coupon_code,
+        "is_vip": is_vip,
+    }
 
 
-def test_create_user_handles_invalid_email_format() -> None:
-    """Test that Pydantic validation rejects an invalid email format with 422."""
-    response = client.post("/users", json={"name": "Test User", "email": "invalid-email"})
-    assert response.status_code == 422
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_returns_expected_final_price(mock_discount_service):
+    # Arrange
+    mock_discount_service.calculate_final_price.return_value = 80.0
+    payload = make_payload()
 
+    # Act
+    response = client.post("/discounts/calculate", json=payload)
 
-def test_check_health_returns_correct_status() -> None:
-    """Test that checkHealth returns the correct status and data."""
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
-def test_search_users_handles_empty_query() -> None:
-    """Test that an empty search query returns all users (empty string matches any name)."""
-    response = client.get("/users/search?q=")
-    assert response.status_code == 200
-    results = response.json()
-    assert isinstance(results, list)
-    assert len(results) > 0
-
-
-def test_search_users_returns_matching_results() -> None:
-    """Test that searchUsers returns matching results for a known query."""
-    response = client.get("/users/search?q=Ana")
-    assert response.status_code == 200
-    results = response.json()
-    assert isinstance(results, list)
-    assert any(user["name"] == "Ana Silva" for user in results)  # Assuming "Ana Silva" is a seeded user
-
-
-def test_create_user_duplicate_email_returns_409() -> None:
-    """Test that creating a user with a duplicate email returns a 409 status."""
-    # First user creation
-    response = client.post("/users", json={"name": "User One", "email": "duplicate@example.com"})
-    assert response.status_code == 201
-
-    # Attempt to create a second user with the same email
-    response = client.post("/users", json={"name": "User Two", "email": "duplicate@example.com"})
-    assert response.status_code == 409
-
-
-def test_create_user_unique_email_returns_201() -> None:
-    """Test that creating a user with a unique email returns a 201 status."""
-    response = client.post("/users", json={"name": "Unique User", "email": "unique@example.com"})
-    assert response.status_code == 201
-
-
-def test_get_user_by_email_success() -> None:
-    """Test that GET /users/by-email returns the correct user when found."""
-    # "ana@example.com" is a seeded user in UserService
-    response = client.get("/users/by-email?email=ana@example.com")
-    assert response.status_code == 200
+    # Assert
+    assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["email"] == "ana@example.com"
-    assert data["name"] == "Ana Silva"
-    # Ensure no sensitive data like password is included
-    assert "password" not in data
+    assert "final_price" in data
+    assert data["final_price"] == 80.0
+    mock_discount_service.calculate_final_price.assert_called_once_with(
+        base_price=payload["base_price"],
+        discount_percentage=payload["discount_percentage"],
+        coupon_code=payload["coupon_code"],
+        is_vip=payload["is_vip"],
+    )
 
 
-def test_get_user_by_email_not_found() -> None:
-    """Test that GET /users/by-email returns 404 when the email is not found."""
-    response = client.get("/users/by-email?email=nonexistent@example.com")
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Usuário não encontrado"
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_raises_value_error_returns_400(mock_discount_service):
+    # Arrange
+    mock_discount_service.calculate_final_price.side_effect = ValueError("Desconto inválido")
+    payload = make_payload()
+
+    # Act
+    response = client.post("/discounts/calculate", json=payload)
+
+    # Assert
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json() == {"detail": "Desconto inválido"}
 
 
-def test_get_user_by_email_missing_email_param_returns_400() -> None:
-    """Test that GET /users/by-email without email parameter returns 422 Unprocessable Entity (FastAPI default for missing required params)."""
-    response = client.get("/users/by-email")
-    assert response.status_code == 422
-    # Optionally check error message if defined
-    json_data = response.json()
-    assert "detail" in json_data
+@pytest.mark.parametrize(
+    "payload,missing_field",
+    [
+        ({"discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": False}, "base_price"),
+        ({"base_price": 100.0, "coupon_code": "SAVE10", "is_vip": False}, "discount_percentage"),
+        ({"base_price": 100.0, "discount_percentage": 10.0, "is_vip": False}, "coupon_code"),  # coupon_code optional, so this is valid
+        ({"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10"}, "is_vip"),
+    ],
+)
+def test_calculate_discount_missing_required_fields(payload, missing_field):
+    # coupon_code is optional, so skip that case
+    if missing_field == "coupon_code":
+        # Should succeed because coupon_code is optional
+        response = client.post("/discounts/calculate", json=payload)
+        assert response.status_code == status.HTTP_200_OK
+        return
+
+    response = client.post("/discounts/calculate", json=payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert missing_field in response.text
 
 
-def test_get_user_by_email_empty_email_param_returns_404_or_error() -> None:
-    """Test that GET /users/by-email with empty email parameter returns 404 or specific error."""
-    response = client.get("/users/by-email?email=")
-    # Accept either 404 or 422 depending on implementation
-    assert response.status_code in (404, 422)
-    json_data = response.json()
-    assert "detail" in json_data
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"base_price": "one hundred", "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": False},
+        {"base_price": 100.0, "discount_percentage": "ten", "coupon_code": "SAVE10", "is_vip": False},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": "no"},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": 123, "is_vip": False},
+    ],
+)
+def test_calculate_discount_invalid_field_types(payload):
+    response = client.post("/discounts/calculate", json=payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
-def test_get_user_by_email_invalid_email_format_returns_404() -> None:
-    """Test that GET /users/by-email with an unregistered or malformed email returns 404 Not Found (no format validation in route)."""
-    response = client.get("/users/by-email?email=invalid-email")
-    assert response.status_code == 404
-    json_data = response.json()
-    assert "detail" in json_data
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"base_price": 0, "discount_percentage": 0, "coupon_code": "", "is_vip": False},
+        {"base_price": -10, "discount_percentage": 0, "coupon_code": None, "is_vip": True},
+        {"base_price": 1000000, "discount_percentage": 100, "coupon_code": "VIP100", "is_vip": True},
+        {"base_price": 100, "discount_percentage": 101, "coupon_code": "INVALID", "is_vip": False},
+        {"base_price": 100, "discount_percentage": -1, "coupon_code": "INVALID", "is_vip": False},
+    ],
+)
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_with_edge_values(mock_discount_service, payload):
+    # Setup mock to return a computed final price or raise ValueError for invalid discount_percentage
+    if payload["discount_percentage"] > 100 or payload["discount_percentage"] < 0:
+        mock_discount_service.calculate_final_price.side_effect = ValueError("Percentual de desconto inválido")
+        response = client.post("/discounts/calculate", json=payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Percentual de desconto inválido" in response.text
+    else:
+        # Return a dummy final price for valid inputs
+        mock_discount_service.calculate_final_price.return_value = 50.0
+        response = client.post("/discounts/calculate", json=payload)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "final_price" in data
+        assert isinstance(data["final_price"], (int, float))
 
 
-def test_get_user_by_email_does_not_return_sensitive_data() -> None:
-    """Test that the response from /users/by-email does not include sensitive fields like password."""
-    response = client.get("/users/by-email?email=ana@example.com")
-    assert response.status_code == 200
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_without_coupon_code(mock_discount_service):
+    mock_discount_service.calculate_final_price.return_value = 90.0
+    payload = {
+        "base_price": 100.0,
+        "discount_percentage": 10.0,
+        "is_vip": False,
+    }
+    response = client.post("/discounts/calculate", json=payload)
+    assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert "password" not in data
-    assert "email" in data
-    assert "name" in data
+    assert data["final_price"] == 90.0
+    mock_discount_service.calculate_final_price.assert_called_once_with(
+        base_price=payload["base_price"],
+        discount_percentage=payload["discount_percentage"],
+        coupon_code=None,
+        is_vip=payload["is_vip"],
+    )
 
 
-@patch("app.services.user_service.UserService.find_by_email")
-def test_get_user_by_email_service_mocked(mock_find_by_email) -> None:
-    """Test /users/by-email endpoint with mocked UserService to isolate controller behavior."""
-    from app.schemas import UserResponse
-    mock_user = UserResponse(id=123, name="Mock User", email="mock@example.com")
-    mock_find_by_email.return_value = mock_user
+def test_calculate_discount_rejects_extra_fields():
+    payload = {
+        "base_price": 100.0,
+        "discount_percentage": 10.0,
+        "coupon_code": "SAVE10",
+        "is_vip": False,
+        "extra_field": "not_allowed",
+    }
+    response = client.post("/discounts/calculate", json=payload)
+    # By default Pydantic rejects extra fields unless configured otherwise
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "extra_field" in response.text
 
-    response = client.get("/users/by-email?email=mock@example.com")
-    assert response.status_code == 200
+
+@pytest.mark.parametrize("method", ["get", "put", "delete", "patch"])
+def test_calculate_discount_method_not_allowed(method):
+    func = getattr(client, method)
+    response = func("/discounts/calculate")
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_service_returns_none(mock_discount_service):
+    mock_discount_service.calculate_final_price.return_value = None
+    payload = make_payload()
+    response = client.post("/discounts/calculate", json=payload)
+    assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["email"] == "mock@example.com"
-    assert data["name"] == "Mock User"
-    assert "password" not in data
-    mock_find_by_email.assert_called_once_with("mock@example.com")
+    # final_price can be None, but schema expects float, so this might cause validation error
+    # We check if the response contains the key and value None
+    assert "final_price" in data
+    assert data["final_price"] is None
+
+
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_service_raises_unexpected_exception_returns_500(mock_discount_service):
+    mock_discount_service.calculate_final_price.side_effect = RuntimeError("Erro inesperado")
+    payload = make_payload()
+    response = client.post("/discounts/calculate", json=payload)
+    # Since only ValueError is caught, other exceptions cause 500 Internal Server Error
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+def test_discount_endpoint_documentation_contains_discount_route():
+    response = client.get("/docs")
+    assert response.status_code == status.HTTP_200_OK
+    # Check if the path /discounts/calculate is documented
+    assert "/discounts/calculate" in response.text
+    # Check if the tag "discounts" is present
+    assert '"discounts"' in response.text
