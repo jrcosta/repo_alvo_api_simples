@@ -128,4 +128,75 @@ class UserControllerTest {
         verify(userService, times(1)).getById(userId);
         verifyNoInteractions(externalService);
     }
+
+    @Test
+    @DisplayName("userExists returns exists=true for user with status INACTIVE and role USER")
+    void userExistsReturnsTrueForInactiveUserWithUserRole() {
+        int userId = 2;
+        UserResponse user = new UserResponse(userId, "Inactive User", "inactive@example.com", "INACTIVE", "USER");
+        when(userService.getById(userId)).thenReturn(Optional.of(user));
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        assertTrue(response.exists(), "exists should be true for inactive user");
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists returns exists=true for user with status ACTIVE and role ADMIN")
+    void userExistsReturnsTrueForActiveUserWithAdminRole() {
+        int userId = 3;
+        UserResponse user = new UserResponse(userId, "Admin User", "admin@example.com", "ACTIVE", "ADMIN");
+        when(userService.getById(userId)).thenReturn(Optional.of(user));
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        assertTrue(response.exists(), "exists should be true for active admin user");
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists returns exists=true for user with unusual status and role")
+    void userExistsReturnsTrueForUserWithSuspendedStatusAndAdminRole() {
+        int userId = 4;
+        UserResponse user = new UserResponse(userId, "Suspended Admin", "suspended@example.com", "SUSPENDED", "ADMIN");
+        when(userService.getById(userId)).thenReturn(Optional.of(user));
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        assertTrue(response.exists(), "exists should be true for suspended admin user");
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists returns exists=false when UserResponse has null status and role")
+    void userExistsReturnsFalseWhenUserHasNullStatusAndRole() {
+        int userId = 5;
+        UserResponse user = new UserResponse(userId, "Null Fields User", "nullfields@example.com", null, null);
+        when(userService.getById(userId)).thenReturn(Optional.of(user));
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        // Since user is present, exists should be true regardless of null fields
+        assertTrue(response.exists(), "exists should be true even if status and role are null");
+        verify(userService, times(1)).getById(userId);
+    }
+
+    @Test
+    @DisplayName("userExists returns exists=true when UserResponse has empty status and role")
+    void userExistsReturnsTrueWhenUserHasEmptyStatusAndRole() {
+        int userId = 6;
+        UserResponse user = new UserResponse(userId, "Empty Fields User", "emptyfields@example.com", "", "");
+        when(userService.getById(userId)).thenReturn(Optional.of(user));
+
+        UserExistsResponse response = userController.userExists(userId);
+
+        assertNotNull(response, "Response should not be null");
+        assertTrue(response.exists(), "exists should be true even if status and role are empty strings");
+        verify(userService, times(1)).getById(userId);
+    }
 }

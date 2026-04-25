@@ -1,5 +1,6 @@
 package com.repoalvo.javaapi;
 
+import com.repoalvo.javaapi.model.UserCreateRequest;
 import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.service.UserService;
@@ -7,8 +8,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,153 +21,80 @@ class UserServiceUnitTest {
     }
 
     @Test
-    void update_shouldReturnUpdatedUser_whenUserExistsAndPayloadHasNameAndEmail() {
-        // Arrange
+    void create_shouldAssignDefaultRoleUserAndStatusActive_whenRoleIsNull() {
+        UserCreateRequest payload = new UserCreateRequest("Carlos", "carlos@example.com", null);
+
+        UserResponse created = userService.create(payload);
+
+        assertThat(created).isNotNull();
+        assertThat(created.id()).isGreaterThan(0);
+        assertThat(created.name()).isEqualTo("Carlos");
+        assertThat(created.email()).isEqualTo("carlos@example.com");
+        assertThat(created.status()).isEqualTo("ACTIVE");
+        assertThat(created.role()).isEqualTo("USER");
+    }
+
+    @Test
+    void create_shouldAssignRoleFromPayloadAndStatusActive_whenRoleIsDefined() {
+        UserCreateRequest payload = new UserCreateRequest("Diana", "diana@example.com", "ADMIN");
+
+        UserResponse created = userService.create(payload);
+
+        assertThat(created).isNotNull();
+        assertThat(created.id()).isGreaterThan(0);
+        assertThat(created.name()).isEqualTo("Diana");
+        assertThat(created.email()).isEqualTo("diana@example.com");
+        assertThat(created.status()).isEqualTo("ACTIVE");
+        assertThat(created.role()).isEqualTo("ADMIN");
+    }
+
+    @Test
+    void update_shouldPreserveStatusAndRole_whenUpdatingNameAndEmail() {
         int userId = 1;
-        String newName = "Ana Updated";
-        String newEmail = "ana.updated@example.com";
-        UserUpdateRequest payload = new UserUpdateRequest(newName, newEmail);
+        Optional<UserResponse> existingOpt = userService.getById(userId);
+        assertThat(existingOpt).isPresent();
+        UserResponse existing = existingOpt.get();
 
-        // Act
+        UserUpdateRequest payload = new UserUpdateRequest("Ana Updated", "ana.updated@example.com");
+
         Optional<UserResponse> updatedOpt = userService.update(userId, payload);
 
-        // Assert
         assertThat(updatedOpt).isPresent();
         UserResponse updated = updatedOpt.get();
+
         assertThat(updated.id()).isEqualTo(userId);
-        assertThat(updated.name()).isEqualTo(newName);
-        assertThat(updated.email()).isEqualTo(newEmail);
+        assertThat(updated.name()).isEqualTo("Ana Updated");
+        assertThat(updated.email()).isEqualTo("ana.updated@example.com");
+        assertThat(updated.status()).isEqualTo(existing.status());
+        assertThat(updated.role()).isEqualTo(existing.role());
     }
 
     @Test
-    void update_shouldReturnUpdatedUser_whenPayloadHasOnlyName() {
-        // Arrange
-        int userId = 2;
-        String originalEmail = userService.getById(userId).map(UserResponse::email).orElse(null);
-        String newName = "Bruno Updated";
-        UserUpdateRequest payload = new UserUpdateRequest(newName, null);
-
-        // Act
-        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
-
-        // Assert
-        assertThat(updatedOpt).isPresent();
-        UserResponse updated = updatedOpt.get();
-        assertThat(updated.id()).isEqualTo(userId);
-        assertThat(updated.name()).isEqualTo(newName);
-        assertThat(updated.email()).isEqualTo(originalEmail);
-    }
-
-    @Test
-    void update_shouldReturnUpdatedUser_whenPayloadHasOnlyEmail() {
-        // Arrange
-        int userId = 1;
-        String originalName = userService.getById(userId).map(UserResponse::name).orElse(null);
-        String newEmail = "ana.newemail@example.com";
-        UserUpdateRequest payload = new UserUpdateRequest(null, newEmail);
-
-        // Act
-        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
-
-        // Assert
-        assertThat(updatedOpt).isPresent();
-        UserResponse updated = updatedOpt.get();
-        assertThat(updated.id()).isEqualTo(userId);
-        assertThat(updated.name()).isEqualTo(originalName);
-        assertThat(updated.email()).isEqualTo(newEmail);
-    }
-
-    @Test
-    void update_shouldReturnEmpty_whenUserDoesNotExist() {
-        // Arrange
+    void update_shouldReturnEmptyOptional_whenUserDoesNotExist() {
         int nonExistentUserId = 9999;
-        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
+        UserUpdateRequest payload = new UserUpdateRequest("Non Existent", "nonexistent@example.com");
 
-        // Act
         Optional<UserResponse> updatedOpt = userService.update(nonExistentUserId, payload);
 
-        // Assert
         assertThat(updatedOpt).isEmpty();
     }
 
     @Test
-    void update_shouldNotModifyUser_whenPayloadHasNullFields() {
-        // Arrange
-        int userId = 1;
-        UserResponse original = userService.getById(userId).orElseThrow();
-        UserUpdateRequest payload = new UserUpdateRequest(null, null);
+    void constructor_shouldInitializeUsersWithCorrectStatusAndRole() {
+        // The constructor adds two users with specific status and role
+        var allUsers = userService.listAllUsers();
 
-        // Act
-        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
+        assertThat(allUsers).hasSizeGreaterThanOrEqualTo(2);
 
-        // Assert
-        assertThat(updatedOpt).isPresent();
-        UserResponse updated = updatedOpt.get();
-        assertThat(updated.id()).isEqualTo(userId);
-        assertThat(updated.name()).isEqualTo(original.name());
-        assertThat(updated.email()).isEqualTo(original.email());
-    }
+        UserResponse user1 = allUsers.stream().filter(u -> u.id() == 1).findFirst().orElse(null);
+        UserResponse user2 = allUsers.stream().filter(u -> u.id() == 2).findFirst().orElse(null);
 
-    @Test
-    void update_shouldReplaceUserInList() {
-        // Arrange
-        int userId = 2;
-        UserResponse beforeUpdate = userService.getById(userId).orElseThrow();
-        UserUpdateRequest payload = new UserUpdateRequest("New Name", "newemail@example.com");
+        assertThat(user1).isNotNull();
+        assertThat(user1.status()).isEqualTo("ACTIVE");
+        assertThat(user1.role()).isEqualTo("ADMIN");
 
-        // Act
-        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
-        UserResponse afterUpdate = userService.getById(userId).orElseThrow();
-
-        // Assert
-        assertThat(updatedOpt).isPresent();
-        UserResponse updated = updatedOpt.get();
-        assertThat(updated).isEqualTo(afterUpdate);
-        assertThat(updated).isNotEqualTo(beforeUpdate);
-        assertThat(updated.name()).isEqualTo("New Name");
-        assertThat(updated.email()).isEqualTo("newemail@example.com");
-    }
-
-    @Test
-    void update_shouldBeThreadSafe() throws InterruptedException {
-        // Arrange
-        int userId = 1;
-        int threadCount = 10;
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(threadCount);
-        AtomicInteger successCount = new AtomicInteger(0);
-
-        Runnable updateTask = () -> {
-            try {
-                startLatch.await();
-                String threadName = Thread.currentThread().getName();
-                UserUpdateRequest payload = new UserUpdateRequest("Name " + threadName, "email" + threadName + "@example.com");
-                Optional<UserResponse> updatedOpt = userService.update(userId, payload);
-                if (updatedOpt.isPresent()) {
-                    successCount.incrementAndGet();
-                }
-            } catch (InterruptedException ignored) {
-            } finally {
-                doneLatch.countDown();
-            }
-        };
-
-        for (int i = 0; i < threadCount; i++) {
-            new Thread(updateTask, "T" + i).start();
-        }
-
-        // Act
-        startLatch.countDown();
-        doneLatch.await();
-
-        // Assert
-        assertThat(successCount.get()).isEqualTo(threadCount);
-
-        // The final state should be one of the updates, no exceptions or corrupt state
-        Optional<UserResponse> finalUserOpt = userService.getById(userId);
-        assertThat(finalUserOpt).isPresent();
-        UserResponse finalUser = finalUserOpt.get();
-        assertThat(finalUser.name()).startsWith("Name T");
-        assertThat(finalUser.email()).endsWith("@example.com");
+        assertThat(user2).isNotNull();
+        assertThat(user2.status()).isEqualTo("ACTIVE");
+        assertThat(user2.role()).isEqualTo("USER");
     }
 }

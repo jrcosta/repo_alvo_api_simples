@@ -190,3 +190,62 @@ def test_discount_endpoint_documentation_contains_discount_route():
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert "/discounts/calculate" in data["paths"]
+
+
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_omitting_discount_percentage_and_is_vip_uses_defaults(mock_discount_service):
+    # Arrange
+    mock_discount_service.calculate_final_price.return_value = 85.0
+    payload = {
+        "base_price": 100.0,
+        "coupon_code": "SAVE10",
+        # discount_percentage and is_vip omitted to test defaults
+    }
+
+    # Act
+    response = client.post("/discounts/calculate", json=payload)
+
+    # Assert
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert "final_price" in data
+    assert data["final_price"] == 85.0
+    mock_discount_service.calculate_final_price.assert_called_once_with(
+        base_price=payload["base_price"],
+        discount_percentage=10.0,  # default value
+        coupon_code=payload["coupon_code"],
+        is_vip=False,  # default value
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": None},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": None, "is_vip": False},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "", "is_vip": False},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": 123},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": 123, "is_vip": False},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": [], "is_vip": False},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": "invalid_string"},
+    ],
+)
+def test_calculate_discount_invalid_types_and_nulls_return_422(payload):
+    response = client.post("/discounts/calculate", json=payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_service_raises_timeout_error_returns_500(mock_discount_service):
+    mock_discount_service.calculate_final_price.side_effect = TimeoutError("Timeout")
+    payload = make_payload()
+    response = client.post("/discounts/calculate", json=payload)
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+@patch("app.api.routes.discount_service")
+def test_calculate_discount_service_raises_generic_exception_returns_500(mock_discount_service):
+    mock_discount_service.calculate_final_price.side_effect = Exception("Erro genérico")
+    payload = make_payload()
+    response = client.post("/discounts/calculate", json=payload)
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

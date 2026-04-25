@@ -33,8 +33,8 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("updateUser updates user with only name provided and returns updated user")
-    void updateUserShouldUpdateNameOnlyAndReturnUser() {
+    @DisplayName("updateUser updates user with only name provided and returns updated user including status and role")
+    void updateUserShouldUpdateNameOnlyAndReturnUserWithStatusAndRole() {
         int userId = 1;
         UserUpdateRequest payload = new UserUpdateRequest("New Name", null);
         UserResponse updatedUser = new UserResponse(userId, "New Name", "oldemail@example.com", "ACTIVE", "USER");
@@ -44,13 +44,15 @@ class UserControllerUnitTest {
         UserResponse result = userController.updateUser(userId, payload);
 
         assertThat(result).isEqualTo(updatedUser);
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.role()).isEqualTo("USER");
         verify(userService, never()).findByEmail(any());
         verify(userService, times(1)).update(userId, payload);
     }
 
     @Test
-    @DisplayName("updateUser updates user with only email provided and returns updated user")
-    void updateUserShouldUpdateEmailOnlyAndReturnUser() {
+    @DisplayName("updateUser updates user with only email provided and returns updated user including status and role")
+    void updateUserShouldUpdateEmailOnlyAndReturnUserWithStatusAndRole() {
         int userId = 2;
         String newEmail = "newemail@example.com";
         UserUpdateRequest payload = new UserUpdateRequest(null, newEmail);
@@ -62,6 +64,8 @@ class UserControllerUnitTest {
         UserResponse result = userController.updateUser(userId, payload);
 
         assertThat(result).isEqualTo(updatedUser);
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.role()).isEqualTo("USER");
         verify(userService, times(1)).findByEmail(newEmail);
         verify(userService, times(1)).update(userId, payload);
     }
@@ -89,7 +93,7 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("updateUser allows update when email belongs to same user")
+    @DisplayName("updateUser allows update when email belongs to same user and returns user with status and role")
     void updateUserShouldAllowUpdateWhenEmailBelongsToSameUser() {
         int userId = 4;
         String sameEmail = "sameuser@example.com";
@@ -103,6 +107,8 @@ class UserControllerUnitTest {
         UserResponse result = userController.updateUser(userId, payload);
 
         assertThat(result).isEqualTo(updatedUser);
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.role()).isEqualTo("USER");
         verify(userService, times(1)).findByEmail(sameEmail);
         verify(userService, times(1)).update(userId, payload);
     }
@@ -147,7 +153,7 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("updateUser handles payload with null and non-null fields correctly")
+    @DisplayName("updateUser handles payload with null and non-null fields correctly and returns user with status and role")
     void updateUserShouldHandlePayloadWithNullAndNonNullFields() {
         int userId = 7;
         UserUpdateRequest payload = new UserUpdateRequest("Valid Name", null);
@@ -158,6 +164,8 @@ class UserControllerUnitTest {
         UserResponse result = userController.updateUser(userId, payload);
 
         assertThat(result).isEqualTo(updatedUser);
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.role()).isEqualTo("USER");
         verify(userService, never()).findByEmail(any());
         verify(userService, times(1)).update(userId, payload);
     }
@@ -177,5 +185,87 @@ class UserControllerUnitTest {
 
         verify(userService, times(1)).findByEmail("email@example.com");
         verify(userService, times(1)).update(userId, payload);
+    }
+
+    // New tests to cover suggestions from QA report
+
+    @Test
+    @DisplayName("updateUser does not alter status and role when not specified in update")
+    void updateUserShouldNotAlterStatusAndRoleWhenNotSpecified() {
+        int userId = 9;
+        UserUpdateRequest payload = new UserUpdateRequest("Name Updated", "emailupdated@example.com");
+        // Simulate that status and role remain unchanged after update
+        UserResponse updatedUser = new UserResponse(userId, "Name Updated", "emailupdated@example.com", "ACTIVE", "USER");
+
+        when(userService.findByEmail("emailupdated@example.com")).thenReturn(Optional.empty());
+        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+
+        UserResponse result = userController.updateUser(userId, payload);
+
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.role()).isEqualTo("USER");
+    }
+
+    @Test
+    @DisplayName("updateUser returns UserResponse with different status and role values correctly propagated")
+    void updateUserShouldReturnUserResponseWithDifferentStatusAndRole() {
+        int userId = 10;
+        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
+        UserResponse updatedUser = new UserResponse(userId, "Name", "email@example.com", "INACTIVE", "ADMIN");
+
+        when(userService.findByEmail("email@example.com")).thenReturn(Optional.empty());
+        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+
+        UserResponse result = userController.updateUser(userId, payload);
+
+        assertThat(result.status()).isEqualTo("INACTIVE");
+        assertThat(result.role()).isEqualTo("ADMIN");
+    }
+
+    @Test
+    @DisplayName("updateUser throws exception when userService.update returns UserResponse with null status and role")
+    void updateUserShouldHandleUserResponseWithNullStatusAndRole() {
+        int userId = 11;
+        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
+        UserResponse updatedUser = new UserResponse(userId, "Name", "email@example.com", null, null);
+
+        when(userService.findByEmail("email@example.com")).thenReturn(Optional.empty());
+        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+
+        UserResponse result = userController.updateUser(userId, payload);
+
+        // Assert that null status and role are propagated as null (or could be defaulted if logic exists)
+        assertThat(result.status()).isNull();
+        assertThat(result.role()).isNull();
+    }
+
+    @Test
+    @DisplayName("updateUser throws exception when userService.update returns UserResponse with empty status and role")
+    void updateUserShouldHandleUserResponseWithEmptyStatusAndRole() {
+        int userId = 12;
+        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
+        UserResponse updatedUser = new UserResponse(userId, "Name", "email@example.com", "", "");
+
+        when(userService.findByEmail("email@example.com")).thenReturn(Optional.empty());
+        when(userService.update(eq(userId), eq(payload))).thenReturn(Optional.of(updatedUser));
+
+        UserResponse result = userController.updateUser(userId, payload);
+
+        assertThat(result.status()).isEmpty();
+        assertThat(result.role()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("updateUser throws exception when userService.update throws exception related to status or role")
+    void updateUserShouldPropagateExceptionFromUserServiceUpdateRelatedToStatusOrRole() {
+        int userId = 13;
+        UserUpdateRequest payload = new UserUpdateRequest("Name", "email@example.com");
+
+        when(userService.findByEmail("email@example.com")).thenReturn(Optional.empty());
+        when(userService.update(eq(userId), eq(payload))).thenThrow(new IllegalArgumentException("Invalid status or role"));
+
+        assertThatThrownBy(() -> userController.updateUser(userId, payload))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid status or role");
     }
 }
