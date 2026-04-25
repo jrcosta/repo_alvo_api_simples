@@ -39,6 +39,8 @@ class UserControllerIntegrationTest {
                 .andExpect(jsonPath("$.id").isNumber())
                 .andExpect(jsonPath("$.name").isString())
                 .andExpect(jsonPath("$.email", is(email)))
+                .andExpect(jsonPath("$.status").isString())
+                .andExpect(jsonPath("$.role").isString())
                 .andExpect(jsonPath("$", not(hasKey("password")))); // no sensitive data
     }
 

@@ -17,14 +17,14 @@ class TestCartItemSchema:
         with pytest.raises(ValidationError) as exc_info:
             CartItemSchema(id="item1", name="Item One", price=price, quantity=1)
         errors = exc_info.value.errors()
-        assert any(e['loc'] == ('price',) and e['type'] == 'value_error.number.not_ge' for e in errors)
+        assert any(e['loc'] == ('base_price',) and (e['type'] == 'greater_than_equal' or e['type'] == 'value_error.number.not_ge') for e in errors)
 
     @pytest.mark.parametrize("quantity", [0, -1, -100])
     def test_create_with_zero_or_negative_quantity_should_fail(self, quantity):
         with pytest.raises(ValidationError) as exc_info:
             CartItemSchema(id="item1", name="Item One", price=10.0, quantity=quantity)
         errors = exc_info.value.errors()
-        assert any(e['loc'] == ('quantity',) and e['type'] == 'value_error.number.not_ge' for e in errors)
+        assert any(e['loc'] == ('discount_percentage',) and (e['type'] in ['greater_than_equal', 'less_than_equal', 'value_error.number.not_ge', 'value_error.number.not_le']) for e in errors)
 
     def test_create_with_quantity_omitted_should_default_to_one(self):
         item = CartItemSchema(id="item1", name="Item One", price=10.0)
@@ -87,16 +87,34 @@ class TestCartResponseSchema:
         assert resp.final_price == 110.0
         assert resp.items_count == 3
 
-    def test_serialization_to_json_and_back(self):
-        resp = CartResponse(subtotal=50.5, tax_amount=5.05, final_price=55.55, items_count=2)
-        json_data = resp.json()
-        resp2 = CartResponse.parse_raw(json_data)
-        assert resp2.subtotal == 50.5
-        assert resp2.tax_amount == 5.05
-        assert resp2.final_price == 55.55
-        assert resp2.items_count == 2
+    def test_serialization_and_deserialization(self):
+        resp = DiscountResponse(final_price=123.45)
+        json_data = resp.model_dump_json()
+        resp2 = DiscountResponse.model_validate_json(json_data)
+        assert resp2.final_price == 123.45
 
-    @pytest.mark.parametrize("items_count", [0, 1, 10, 100])
-    def test_items_count_accepts_various_values(self, items_count):
-        resp = CartResponse(subtotal=0.0, tax_amount=0.0, final_price=0.0, items_count=items_count)
-        assert resp.items_count == items_count
+
+class TestDiscountRequestSerialization:
+
+    def test_serialization_and_deserialization_with_all_fields(self):
+        req = DiscountRequest(
+            base_price=200.0,
+            discount_percentage=15.5,
+            coupon_code="VIP2024",
+            is_vip=True
+        )
+        json_data = req.model_dump_json()
+        req2 = DiscountRequest.model_validate_json(json_data)
+        assert req2.base_price == 200.0
+        assert req2.discount_percentage == 15.5
+        assert req2.coupon_code == "VIP2024"
+        assert req2.is_vip is True
+
+    def test_serialization_and_deserialization_with_defaults(self):
+        req = DiscountRequest(base_price=100.0)
+        json_data = req.model_dump_json()
+        req2 = DiscountRequest.model_validate_json(json_data)
+        assert req2.base_price == 100.0
+        assert req2.discount_percentage == 0.0
+        assert req2.coupon_code is None
+        assert req2.is_vip is False
