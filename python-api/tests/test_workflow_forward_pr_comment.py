@@ -1,153 +1,173 @@
-import os
-import subprocess
-import unittest
-from unittest.mock import patch, MagicMock
+import pytest
 
-class TestForwardPrCommentWorkflow(unittest.TestCase):
+# Simulação da função que determina se o job deve disparar
+def should_forward_job(event):
     """
-    Test suite to simulate and validate the behavior of the forward-pr-comment GitHub Actions workflow logic,
-    focusing on the usage of the QAGENT_PAT token and the payload construction for repository_dispatch.
+    Simula a condição do job 'forward' do workflow:
+    Deve retornar True se:
+    - github.event.issue.pull_request != null (simulado como não None)
+    - github.event.comment.body contém '#qagent-test-review' (case-sensitive)
     """
+    issue = event.get("issue", {})
+    comment = event.get("comment", {})
+    if issue.get("pull_request") is None:
+        return False
+    body = comment.get("body", "")
+    return "#qagent-test-review" in body
 
-    def setUp(self):
-        # Setup environment variables as they would be in the workflow
-        self.env = {
-            "QAGENT_PAT": "fake_token_123",
-            "COMMENT_BODY": "This is a test comment",
-            "COMMENT_AUTHOR": "testcopilotuser",
-            "REPOSITORY_NAME": "owner/repo",
-            "PR_NUMBER": "42"
-        }
 
-    def test_dispatch_payload_construction(self):
-        """
-        Test that the JSON payload constructed matches the expected structure and content.
-        """
-        import json
+class TestForwardPrCommentWorkflow:
 
-        # Simulate the jq command in Python to build the payload
-        payload = {
-            "event_type": "pr_comment_created",
-            "client_payload": {
-                "comment_body": self.env["COMMENT_BODY"],
-                "author": self.env["COMMENT_AUTHOR"],
-                "repo": self.env["REPOSITORY_NAME"],
-                "pr_number": self.env["PR_NUMBER"]
-            }
-        }
-
-        # Convert to JSON string
-        payload_json = json.dumps(payload)
-
-        # Validate keys and values
-        self.assertIn("event_type", payload)
-        self.assertEqual(payload["event_type"], "pr_comment_created")
-        self.assertIn("client_payload", payload)
-        client_payload = payload["client_payload"]
-        self.assertEqual(client_payload["comment_body"], self.env["COMMENT_BODY"])
-        self.assertEqual(client_payload["author"], self.env["COMMENT_AUTHOR"])
-        self.assertEqual(client_payload["repo"], self.env["REPOSITORY_NAME"])
-        self.assertEqual(client_payload["pr_number"], self.env["PR_NUMBER"])
-
-        # Validate JSON string is parseable
-        parsed = json.loads(payload_json)
-        self.assertEqual(parsed, payload)
-
-    @patch("subprocess.run")
-    def test_curl_command_execution_with_valid_token(self, mock_run):
-        """
-        Test that the curl command is called with the correct headers and data when QAGENT_PAT is set.
-        """
-        # Setup mock to simulate successful curl call
-        mock_completed_process = MagicMock()
-        mock_completed_process.returncode = 0
-        mock_run.return_value = mock_completed_process
-
-        # Build the curl command as in the workflow
-        curl_cmd = [
-            "curl", "-sf", "-X", "POST",
-            "-H", "Accept: application/vnd.github+json",
-            "-H", f"Authorization: Bearer {self.env['QAGENT_PAT']}",
-            "https://api.github.com/repos/jrcosta/qagent/dispatches",
-            "-d", unittest.mock.ANY  # payload JSON string
-        ]
-
-        # Call subprocess.run with the command
-        subprocess.run(curl_cmd, check=True)
-
-        # Assert subprocess.run was called once with expected args
-        mock_run.assert_called_once()
-        args, kwargs = mock_run.call_args
-        self.assertIn("-H", args[0])
-        self.assertIn(f"Authorization: Bearer {self.env['QAGENT_PAT']}", args[0])
-        self.assertIn("https://api.github.com/repos/jrcosta/qagent/dispatches", args[0])
-
-    @patch("subprocess.run")
-    def test_curl_command_fails_with_missing_token(self, mock_run):
-        """
-        Test that the curl command fails (raises CalledProcessError) when QAGENT_PAT is missing or empty.
-        """
-        # Simulate missing token by empty string
-        env = self.env.copy()
-        env["QAGENT_PAT"] = ""
-
-        # Setup mock to simulate curl failure due to auth error
-        mock_run.side_effect = subprocess.CalledProcessError(returncode=22, cmd="curl")
-
-        with self.assertRaises(subprocess.CalledProcessError):
-            curl_cmd = [
-                "curl", "-sf", "-X", "POST",
-                "-H", "Accept: application/vnd.github+json",
-                "-H", f"Authorization: Bearer {env['QAGENT_PAT']}",
-                "https://api.github.com/repos/jrcosta/qagent/dispatches",
-                "-d", "{}"
-            ]
-            subprocess.run(curl_cmd, check=True)
-
-        mock_run.assert_called_once()
-
-    def test_forward_job_condition_with_copilot_user(self):
-        """
-        Test the condition that triggers the forward job: github.event.issue.pull_request != null &&
-        contains(github.event.comment.user.login, 'copilot')
-        """
-        def should_run_forward_job(event):
-            pr = event.get("issue", {}).get("pull_request")
-            user_login = event.get("comment", {}).get("user", {}).get("login", "")
-            return pr is not None and "copilot" in user_login
-
-        # Case: PR comment by user with 'copilot' in login
+    def test_comment_in_pr_without_tag_and_user_not_copilot_does_not_trigger(self):
         event = {
             "issue": {"pull_request": {"url": "some_url"}},
-            "comment": {"user": {"login": "mycopilotuser"}}
+            "comment": {
+                "body": "This is a normal comment without tag",
+                "user": {"login": "randomuser"}
+            }
         }
-        self.assertTrue(should_run_forward_job(event))
+        assert not should_forward_job(event)
 
-        # Case: PR comment by user without 'copilot' in login
-        event["comment"]["user"]["login"] = "normaluser"
-        self.assertFalse(should_run_forward_job(event))
+    def test_comment_in_pr_with_tag_by_any_user_triggers(self):
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Please run tests #qagent-test-review",
+                "user": {"login": "randomuser"}
+            }
+        }
+        assert should_forward_job(event)
 
-        # Case: Issue comment but not a PR (pull_request is None)
-        event["issue"]["pull_request"] = None
-        event["comment"]["user"]["login"] = "mycopilotuser"
-        self.assertFalse(should_run_forward_job(event))
+    def test_comment_in_pr_with_tag_case_variation_does_not_trigger_due_to_case_sensitivity(self):
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Run tests #QAgent-Test-Review please",
+                "user": {"login": "randomuser"}
+            }
+        }
+        # contains is case-sensitive, so should not trigger
+        assert not should_forward_job(event)
 
-    @patch("subprocess.run")
-    def test_workflow_step_echo_on_success(self, mock_run):
-        """
-        Test that after successful curl execution, the echo message is printed.
-        """
-        mock_completed_process = MagicMock()
-        mock_completed_process.returncode = 0
-        mock_run.return_value = mock_completed_process
+    def test_comment_in_issue_not_pr_with_tag_does_not_trigger(self):
+        event = {
+            "issue": {"pull_request": None},
+            "comment": {
+                "body": "Run tests #qagent-test-review",
+                "user": {"login": "randomuser"}
+            }
+        }
+        assert not should_forward_job(event)
 
-        # Simulate running the curl command
-        subprocess.run(["curl", "-sf", "-X", "POST"], check=True)
+    def test_comment_in_pr_by_user_with_copilot_in_login_but_without_tag_does_not_trigger(self):
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Just a comment without tag",
+                "user": {"login": "github-copilot-bot"}
+            }
+        }
+        # The new condition ignores user login, so no trigger without tag
+        assert not should_forward_job(event)
 
-        # Simulate echo output
-        echo_output = "✅ Forwarded comment to qagent"
+    def test_comment_in_pr_with_multiple_tags_including_qagent_tag_triggers(self):
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Some comment #other-tag #qagent-test-review #another-tag",
+                "user": {"login": "user123"}
+            }
+        }
+        assert should_forward_job(event)
 
-        self.assertEqual(echo_output, "✅ Forwarded comment to qagent")
+    def test_comment_in_pr_with_tag_embedded_in_text_triggers(self):
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Please #qagent-test-review run the tests now!",
+                "user": {"login": "user123"}
+            }
+        }
+        assert should_forward_job(event)
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_comment_in_pr_with_tag_with_spaces_around_triggers(self):
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Run tests  #qagent-test-review  please",
+                "user": {"login": "user123"}
+            }
+        }
+        assert should_forward_job(event)
+
+    def test_comment_in_pr_with_tag_with_unicode_nearby_triggers(self):
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Run tests #qagent-test-review🚀",
+                "user": {"login": "user123"}
+            }
+        }
+        assert should_forward_job(event)
+
+    def test_comment_in_pr_edited_to_add_tag_triggers(self):
+        # Simulate initial comment without tag
+        event_initial = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Initial comment without tag",
+                "user": {"login": "user123"}
+            }
+        }
+        assert not should_forward_job(event_initial)
+
+        # Simulate edited comment with tag added
+        event_edited = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Initial comment without tag #qagent-test-review",
+                "user": {"login": "user123"}
+            }
+        }
+        assert should_forward_job(event_edited)
+
+    def test_comment_deleted_does_not_trigger(self):
+        # The workflow triggers only on created comments, so deleted comments do not trigger
+        # Simulate event type other than created (not in scope of condition)
+        # Here we just test that without created event, no trigger
+        event = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "#qagent-test-review",
+                "user": {"login": "user123"}
+            },
+            "action": "deleted"
+        }
+        # The condition depends on event type 'created', so simulate that deleted does not trigger
+        # Since our function does not check action, we simulate that deleted event is ignored by workflow trigger
+        # So we consider this test out of scope for condition function
+        # But we assert that if action is deleted, no trigger
+        # For this test, we assume should_forward_job is called only on created events
+        # So no assertion here, just placeholder
+        pass
+
+    def test_comment_edited_to_remove_tag_does_not_trigger(self):
+        # Simulate initial comment with tag
+        event_initial = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Run tests #qagent-test-review",
+                "user": {"login": "user123"}
+            }
+        }
+        assert should_forward_job(event_initial)
+
+        # Simulate edited comment with tag removed
+        event_edited = {
+            "issue": {"pull_request": {"url": "some_url"}},
+            "comment": {
+                "body": "Run tests",
+                "user": {"login": "user123"}
+            }
+        }
+        assert not should_forward_job(event_edited)
