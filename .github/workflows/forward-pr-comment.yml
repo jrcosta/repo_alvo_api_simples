@@ -8,7 +8,7 @@ jobs:
   forward:
     if: >-
       github.event.issue.pull_request != null &&
-      contains(github.event.comment.user.login, 'copilot')
+      contains(github.event.comment.body, '#qagent-test-review')
     runs-on: ubuntu-latest
 
     steps:
