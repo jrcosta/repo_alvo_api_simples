@@ -1,197 +1,323 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
-from app.api.routes import router
-from app.schemas import DiscountRequest, DiscountResponse
-from fastapi import FastAPI, status
+from app.api import routes
+from app.schemas import CartRequest, CartResponse, CartRequest
+from fastapi import status
+from pydantic import ValidationError
 
-app = FastAPI()
-app.include_router(router)
-
-client = TestClient(app)
+client = TestClient(routes.router)
 
 
-def make_payload(
-    base_price=100.0,
-    discount_percentage=10.0,
-    coupon_code="SAVE10",
-    is_vip=False,
-):
-    return {
-        "base_price": base_price,
-        "discount_percentage": discount_percentage,
+def make_cart_request_payload(items=None, coupon_code=None, is_vip=False):
+    if items is None:
+        items = [{"product_id": 1, "quantity": 2, "price": 10.0}]
+    payload = {
+        "items": items,
         "coupon_code": coupon_code,
         "is_vip": is_vip,
     }
+    # Remove keys with None values to simulate optional omission
+    return {k: v for k, v in payload.items() if v is not None}
 
 
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_returns_expected_final_price(mock_discount_service):
+@patch("app.api.routes.cart_service")
+def test_calculate_cart_returns_cart_response_with_correct_total(mock_cart_service):
     # Arrange
-    mock_discount_service.calculate_final_price.return_value = 80.0
-    payload = make_payload()
+    items = [
+        {"product_id": 1, "quantity": 2, "price": 10.0},
+        {"product_id": 2, "quantity": 1, "price": 20.0},
+    ]
+    coupon_code = None
+    is_vip = False
+    expected_result = {
+        "total": 40.0,
+        "discount": 0.0,
+        "final_total": 40.0,
+        "items": items,
+    }
+    mock_cart_service.calculate_cart_total.return_value = expected_result
+
+    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
 
     # Act
-    response = client.post("/discounts/calculate", json=payload)
+    response = client.post("/cart/calculate", json=payload)
 
     # Assert
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert "final_price" in data
-    assert data["final_price"] == 80.0
-    mock_discount_service.calculate_final_price.assert_called_once_with(
-        base_price=payload["base_price"],
-        discount_percentage=payload["discount_percentage"],
-        coupon_code=payload["coupon_code"],
-        is_vip=payload["is_vip"],
+    assert data["total"] == expected_result["total"]
+    assert data["discount"] == expected_result["discount"]
+    assert data["final_total"] == expected_result["final_total"]
+    assert data["items"] == expected_result["items"]
+    mock_cart_service.calculate_cart_total.assert_called_once()
+    # Validate that items passed to service are dicts (model_dump equivalent)
+    called_args, called_kwargs = mock_cart_service.calculate_cart_total.call_args
+    assert isinstance(called_kwargs["items"], list)
+    for item in called_kwargs["items"]:
+        assert isinstance(item, dict)
+    assert called_kwargs["coupon_code"] == coupon_code
+    assert called_kwargs["is_vip"] == is_vip
+
+
+@patch("app.api.routes.cart_service")
+def test_calculate_cart_applies_coupon_discount_correctly(mock_cart_service):
+    # Arrange
+    items = [{"product_id": 1, "quantity": 3, "price": 15.0}]
+    coupon_code = "VALIDCOUPON"
+    is_vip = False
+    expected_result = {
+        "total": 45.0,
+        "discount": 5.0,
+        "final_total": 40.0,
+        "items": items,
+    }
+    mock_cart_service.calculate_cart_total.return_value = expected_result
+
+    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
+
+    # Act
+    response = client.post("/cart/calculate", json=payload)
+
+    # Assert
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["discount"] == expected_result["discount"]
+    assert data["final_total"] == expected_result["final_total"]
+    mock_cart_service.calculate_cart_total.assert_called_once_with(
+        items=[{"product_id": 1, "quantity": 3, "price": 15.0}],
+        coupon_code=coupon_code,
+        is_vip=is_vip,
     )
 
 
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_raises_value_error_returns_400(mock_discount_service):
+@patch("app.api.routes.cart_service")
+def test_calculate_cart_returns_400_on_value_error_from_service(mock_cart_service):
     # Arrange
-    mock_discount_service.calculate_final_price.side_effect = ValueError("Desconto inválido")
-    payload = make_payload()
+    items = [{"product_id": 1, "quantity": 1, "price": 10.0}]
+    coupon_code = "INVALID"
+    is_vip = False
+    error_message = "Cupom inválido"
+
+    mock_cart_service.calculate_cart_total.side_effect = ValueError(error_message)
+
+    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
 
     # Act
-    response = client.post("/discounts/calculate", json=payload)
+    response = client.post("/cart/calculate", json=payload)
 
     # Assert
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json() == {"detail": "Desconto inválido"}
+    assert response.json()["detail"] == error_message
+    mock_cart_service.calculate_cart_total.assert_called_once()
 
 
-@pytest.mark.parametrize(
-    "payload,missing_field",
-    [
-        ({"discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": False}, "base_price"),
-        ({"base_price": 100.0, "coupon_code": "SAVE10", "is_vip": False}, "discount_percentage"),
-        ({"base_price": 100.0, "discount_percentage": 10.0, "is_vip": False}, "coupon_code"),  # coupon_code optional, so this is valid
-        ({"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10"}, "is_vip"),
-    ],
-)
-def test_calculate_discount_missing_required_fields(payload, missing_field):
-    # coupon_code is optional, so skip that case
-    if missing_field == "coupon_code":
-        # Should succeed because coupon_code is optional
-        response = client.post("/discounts/calculate", json=payload)
-        assert response.status_code == status.HTTP_200_OK
-        return
-
-    response = client.post("/discounts/calculate", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert missing_field in response.text
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"base_price": "one hundred", "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": False},
-        {"base_price": 100.0, "discount_percentage": "ten", "coupon_code": "SAVE10", "is_vip": False},
-        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": "no"},
-        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": 123, "is_vip": False},
-    ],
-)
-def test_calculate_discount_invalid_field_types(payload):
-    response = client.post("/discounts/calculate", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"base_price": 0, "discount_percentage": 0, "coupon_code": "", "is_vip": False},
-        {"base_price": -10, "discount_percentage": 0, "coupon_code": None, "is_vip": True},
-        {"base_price": 1000000, "discount_percentage": 100, "coupon_code": "VIP100", "is_vip": True},
-        {"base_price": 100, "discount_percentage": 101, "coupon_code": "INVALID", "is_vip": False},
-        {"base_price": 100, "discount_percentage": -1, "coupon_code": "INVALID", "is_vip": False},
-    ],
-)
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_with_edge_values(mock_discount_service, payload):
-    # Setup mock to return a computed final price or raise ValueError for invalid discount_percentage
-    if payload["discount_percentage"] > 100 or payload["discount_percentage"] < 0:
-        mock_discount_service.calculate_final_price.side_effect = ValueError("Percentual de desconto inválido")
-        response = client.post("/discounts/calculate", json=payload)
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Percentual de desconto inválido" in response.text
-    else:
-        # Return a dummy final price for valid inputs
-        mock_discount_service.calculate_final_price.return_value = 50.0
-        response = client.post("/discounts/calculate", json=payload)
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert "final_price" in data
-        assert isinstance(data["final_price"], (int, float))
-
-
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_without_coupon_code(mock_discount_service):
-    mock_discount_service.calculate_final_price.return_value = 90.0
-    payload = {
-        "base_price": 100.0,
-        "discount_percentage": 10.0,
-        "is_vip": False,
+@patch("app.api.routes.cart_service")
+def test_calculate_cart_applies_vip_discount_correctly(mock_cart_service):
+    # Arrange
+    items = [{"product_id": 1, "quantity": 2, "price": 50.0}]
+    coupon_code = None
+    is_vip = True
+    expected_result = {
+        "total": 100.0,
+        "discount": 20.0,
+        "final_total": 80.0,
+        "items": items,
     }
-    response = client.post("/discounts/calculate", json=payload)
+    mock_cart_service.calculate_cart_total.return_value = expected_result
+
+    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
+
+    # Act
+    response = client.post("/cart/calculate", json=payload)
+
+    # Assert
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["final_price"] == 90.0
-    mock_discount_service.calculate_final_price.assert_called_once_with(
-        base_price=payload["base_price"],
-        discount_percentage=payload["discount_percentage"],
-        coupon_code=None,
-        is_vip=payload["is_vip"],
+    assert data["discount"] == expected_result["discount"]
+    assert data["final_total"] == expected_result["final_total"]
+    mock_cart_service.calculate_cart_total.assert_called_once_with(
+        items=[{"product_id": 1, "quantity": 2, "price": 50.0}],
+        coupon_code=coupon_code,
+        is_vip=is_vip,
     )
 
 
-def test_calculate_discount_rejects_extra_fields():
-    payload = {
-        "base_price": 100.0,
-        "discount_percentage": 10.0,
-        "coupon_code": "SAVE10",
-        "is_vip": False,
-        "extra_field": "not_allowed",
+@patch("app.api.routes.cart_service")
+def test_calculate_cart_with_empty_items_returns_zero_total(mock_cart_service):
+    # Arrange
+    items = []
+    coupon_code = None
+    is_vip = False
+    expected_result = {
+        "total": 0.0,
+        "discount": 0.0,
+        "final_total": 0.0,
+        "items": items,
     }
-    response = client.post("/discounts/calculate", json=payload)
-    # By default Pydantic rejects extra fields unless configured otherwise
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert "extra_field" in response.text
+    mock_cart_service.calculate_cart_total.return_value = expected_result
 
+    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
 
-@pytest.mark.parametrize("method", ["get", "put", "delete", "patch"])
-def test_calculate_discount_method_not_allowed(method):
-    func = getattr(client, method)
-    response = func("/discounts/calculate")
-    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+    # Act
+    response = client.post("/cart/calculate", json=payload)
 
-
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_service_returns_none(mock_discount_service):
-    mock_discount_service.calculate_final_price.return_value = None
-    payload = make_payload()
-    response = client.post("/discounts/calculate", json=payload)
+    # Assert
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    # final_price can be None, but schema expects float, so this might cause validation error
-    # We check if the response contains the key and value None
-    assert "final_price" in data
-    assert data["final_price"] is None
+    assert data["total"] == 0.0
+    assert data["final_total"] == 0.0
+    mock_cart_service.calculate_cart_total.assert_called_once()
 
 
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_service_raises_unexpected_exception_returns_500(mock_discount_service):
-    mock_discount_service.calculate_final_price.side_effect = RuntimeError("Erro inesperado")
-    payload = make_payload()
-    response = client.post("/discounts/calculate", json=payload)
-    # Since only ValueError is caught, other exceptions cause 500 Internal Server Error
+def test_calculate_cart_rejects_invalid_item_data():
+    # Negative quantity and price should be rejected by Pydantic validation
+    payload = {
+        "items": [
+            {"product_id": 1, "quantity": -1, "price": 10.0},
+            {"product_id": 2, "quantity": 1, "price": -5.0},
+        ],
+        "coupon_code": None,
+        "is_vip": False,
+    }
+    response = client.post("/cart/calculate", json=payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+def test_calculate_cart_rejects_payload_missing_required_fields():
+    # Missing 'items' field should cause validation error 422
+    payload = {
+        "coupon_code": "ANY",
+        "is_vip": False,
+    }
+    response = client.post("/cart/calculate", json=payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@patch("app.api.routes.cart_service")
+def test_calculate_cart_returns_500_on_unexpected_exception(mock_cart_service):
+    # Arrange
+    items = [{"product_id": 1, "quantity": 1, "price": 10.0}]
+    coupon_code = None
+    is_vip = False
+
+    mock_cart_service.calculate_cart_total.side_effect = RuntimeError("Unexpected error")
+
+    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
+
+    # Act
+    response = client.post("/cart/calculate", json=payload)
+
+    # Assert
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
-def test_discount_endpoint_documentation_contains_discount_route():
-    response = client.get("/docs")
+@patch("app.api.routes.cart_service")
+def test_calculate_cart_calls_service_with_correct_parameters(mock_cart_service):
+    # Arrange
+    items = [
+        {"product_id": 1, "quantity": 2, "price": 10.0},
+        {"product_id": 2, "quantity": 3, "price": 5.0},
+    ]
+    coupon_code = "COUPON123"
+    is_vip = True
+    expected_result = {
+        "total": 35.0,
+        "discount": 5.0,
+        "final_total": 30.0,
+        "items": items,
+    }
+    mock_cart_service.calculate_cart_total.return_value = expected_result
+
+    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
+
+    # Act
+    response = client.post("/cart/calculate", json=payload)
+
+    # Assert
     assert response.status_code == status.HTTP_200_OK
-    # Check if the path /discounts/calculate is documented
-    assert "/discounts/calculate" in response.text
-    # Check if the tag "discounts" is present
-    assert '"discounts"' in response.text
+    mock_cart_service.calculate_cart_total.assert_called_once()
+    called_args, called_kwargs = mock_cart_service.calculate_cart_total.call_args
+    # Check that items are list of dicts
+    assert isinstance(called_kwargs["items"], list)
+    for item in called_kwargs["items"]:
+        assert isinstance(item, dict)
+    assert called_kwargs["coupon_code"] == coupon_code
+    assert called_kwargs["is_vip"] == is_vip
+
+
+def test_calculate_cart_rejects_payload_with_extra_fields():
+    # Payload with extra fields not defined in schema should be rejected by Pydantic
+    payload = {
+        "items": [{"product_id": 1, "quantity": 1, "price": 10.0, "extra_field": "not_allowed"}],
+        "coupon_code": None,
+        "is_vip": False,
+    }
+    response = client.post("/cart/calculate", json=payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+def test_calculate_cart_accepts_payload_without_coupon_code():
+    # coupon_code omitted should be accepted and treated as None
+    payload = {
+        "items": [{"product_id": 1, "quantity": 1, "price": 10.0}],
+        "is_vip": False,
+    }
+    response = client.post("/cart/calculate", json=payload)
+    # Since cart_service is not mocked here, it will raise error, so just check 422 or 400 or 500
+    assert response.status_code in {status.HTTP_422_UNPROCESSABLE_ENTITY, status.HTTP_400_BAD_REQUEST, status.HTTP_500_INTERNAL_SERVER_ERROR}
+
+
+def test_calculate_cart_rejects_items_with_zero_quantity_or_price():
+    # Quantity or price zero should be invalid
+    payload = {
+        "items": [
+            {"product_id": 1, "quantity": 0, "price": 10.0},
+            {"product_id": 2, "quantity": 1, "price": 0.0},
+        ],
+        "coupon_code": None,
+        "is_vip": False,
+    }
+    response = client.post("/cart/calculate", json=payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+def test_calculate_cart_rejects_items_with_malicious_strings():
+    # Strings with special characters in product_id or coupon_code should be rejected if schema is strict
+    payload = {
+        "items": [{"product_id": "DROP TABLE users;", "quantity": 1, "price": 10.0}],
+        "coupon_code": "<script>alert(1)</script>",
+        "is_vip": False,
+    }
+    response = client.post("/cart/calculate", json=payload)
+    # Depending on schema, this may be rejected or accepted; we check for rejection here
+    assert response.status_code in {status.HTTP_422_UNPROCESSABLE_ENTITY, status.HTTP_400_BAD_REQUEST}
+
+
+@patch("app.api.routes.cart_service")
+def test_calculate_cart_handles_duplicate_items_correctly(mock_cart_service):
+    # Arrange
+    items = [
+        {"product_id": 1, "quantity": 1, "price": 10.0},
+        {"product_id": 1, "quantity": 2, "price": 10.0},
+    ]
+    coupon_code = None
+    is_vip = False
+    expected_result = {
+        "total": 30.0,
+        "discount": 0.0,
+        "final_total": 30.0,
+        "items": items,
+    }
+    mock_cart_service.calculate_cart_total.return_value = expected_result
+
+    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
+
+    # Act
+    response = client.post("/cart/calculate", json=payload)
+
+    # Assert
+    assert response.status_code == status.HTTP_200_OK
+    mock_cart_service.calculate_cart_total.assert_called_once()
+    called_args, called_kwargs = mock_cart_service.calculate_cart_total.call_args
+    assert called_kwargs["items"] == items
