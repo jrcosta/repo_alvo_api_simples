@@ -17,8 +17,8 @@ public class UserService {
     private final AtomicInteger nextId = new AtomicInteger(3);
 
     public UserService() {
-        users.add(new UserResponse(1, "Ana Silva", "ana@example.com", "ACTIVE", "ADMIN"));
-        users.add(new UserResponse(2, "Bruno Lima", "bruno@example.com", "ACTIVE", "USER"));
+        users.add(new UserResponse(1, "Ana Silva", "ana@example.com", "ACTIVE", "ADMIN", "+55 11 90000-0001"));
+        users.add(new UserResponse(2, "Bruno Lima", "bruno@example.com", "ACTIVE", "USER", "+55 11 90000-0002"));
     }
 
     public synchronized List<UserResponse> listUsers(int limit, int offset) {
@@ -47,7 +47,14 @@ public class UserService {
 
     public synchronized UserResponse create(UserCreateRequest payload) {
         String role = (payload.role() != null) ? payload.role() : "USER";
-        UserResponse user = new UserResponse(nextId.getAndIncrement(), payload.name(), payload.email(), "ACTIVE", role);
+        UserResponse user = new UserResponse(
+                nextId.getAndIncrement(),
+                payload.name(),
+                payload.email(),
+                "ACTIVE",
+                role,
+                payload.phoneNumber()
+        );
         users.add(user);
         return user;
     }
@@ -58,7 +65,14 @@ public class UserService {
             if (existing.id() == userId) {
                 String updatedName = (payload.name() != null) ? payload.name() : existing.name();
                 String updatedEmail = (payload.email() != null) ? payload.email() : existing.email();
-                UserResponse updated = new UserResponse(existing.id(), updatedName, updatedEmail, existing.status(), existing.role());
+                UserResponse updated = new UserResponse(
+                        existing.id(),
+                        updatedName,
+                        updatedEmail,
+                        existing.status(),
+                        existing.role(),
+                        existing.phoneNumber()
+                );
                 users.set(i, updated);
                 return Optional.of(updated);
             }
