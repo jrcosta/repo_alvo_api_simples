@@ -22,14 +22,14 @@ class TestDiscountRequestModel:
         with pytest.raises(ValidationError) as exc_info:
             DiscountRequest(base_price=base_price)
         errors = exc_info.value.errors()
-        assert any(e['loc'] == ('base_price',) and e['type'] == 'value_error.number.not_ge' for e in errors)
+        assert any(e['loc'] == ('base_price',) and (e['type'] == 'greater_than_equal' or e['type'] == 'value_error.number.not_ge') for e in errors)
 
     @pytest.mark.parametrize("discount_percentage", [-0.01, -1, 100.1, 150])
     def test_create_with_discount_percentage_out_of_bounds_should_fail(self, discount_percentage):
         with pytest.raises(ValidationError) as exc_info:
             DiscountRequest(base_price=10.0, discount_percentage=discount_percentage)
         errors = exc_info.value.errors()
-        assert any(e['loc'] == ('discount_percentage',) and e['type'] == 'value_error.number.not_ge' or e['type'] == 'value_error.number.not_le' for e in errors)
+        assert any(e['loc'] == ('discount_percentage',) and (e['type'] in ['greater_than_equal', 'less_than_equal', 'value_error.number.not_ge', 'value_error.number.not_le']) for e in errors)
 
     @pytest.mark.parametrize("coupon_code", [None, "", " ", "ABC123", "!@#$%^&*()", "A" * 1000])
     def test_coupon_code_accepts_various_values(self, coupon_code):
@@ -60,8 +60,8 @@ class TestDiscountResponseModel:
 
     def test_serialization_and_deserialization(self):
         resp = DiscountResponse(final_price=123.45)
-        json_data = resp.json()
-        resp2 = DiscountResponse.parse_raw(json_data)
+        json_data = resp.model_dump_json()
+        resp2 = DiscountResponse.model_validate_json(json_data)
         assert resp2.final_price == 123.45
 
 
@@ -74,8 +74,8 @@ class TestDiscountRequestSerialization:
             coupon_code="VIP2024",
             is_vip=True
         )
-        json_data = req.json()
-        req2 = DiscountRequest.parse_raw(json_data)
+        json_data = req.model_dump_json()
+        req2 = DiscountRequest.model_validate_json(json_data)
         assert req2.base_price == 200.0
         assert req2.discount_percentage == 15.5
         assert req2.coupon_code == "VIP2024"
@@ -83,8 +83,8 @@ class TestDiscountRequestSerialization:
 
     def test_serialization_and_deserialization_with_defaults(self):
         req = DiscountRequest(base_price=100.0)
-        json_data = req.json()
-        req2 = DiscountRequest.parse_raw(json_data)
+        json_data = req.model_dump_json()
+        req2 = DiscountRequest.model_validate_json(json_data)
         assert req2.base_price == 100.0
         assert req2.discount_percentage == 0.0
         assert req2.coupon_code is None

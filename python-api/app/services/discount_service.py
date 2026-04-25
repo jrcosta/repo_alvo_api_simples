@@ -27,6 +27,15 @@ class DiscountService:
         4. Cupons 'QUERO20' dão 20 reais de desconto fixo se a compra for acima de 100 reais.
         5. O preço final nunca pode ser menor que 0.
         """
+        if not isinstance(base_price, (int, float)):
+            raise TypeError("base_price deve ser um número")
+        if not isinstance(discount_percentage, (int, float)):
+            raise TypeError("discount_percentage deve ser um número")
+        if coupon_code is not None and not isinstance(coupon_code, str):
+            raise TypeError("coupon_code deve ser uma string")
+        if not isinstance(is_vip, bool) and is_vip is not None:
+             raise TypeError("is_vip deve ser um booleano")
+
         if base_price < 0:
             raise ValueError("Preço base não pode ser negativo")
 
@@ -58,6 +67,11 @@ class DiscountService:
         10+ itens: 10%
         20+ itens: 15%
         """
+        if not isinstance(items_count, int):
+            raise TypeError("items_count deve ser um inteiro")
+        if not isinstance(total_value, (int, float)):
+            raise TypeError("total_value deve ser um número")
+        
         if items_count >= 20:
             factor = 0.85
         elif items_count >= 10:

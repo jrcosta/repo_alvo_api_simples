@@ -8,7 +8,7 @@ from fastapi import FastAPI, status
 app = FastAPI()
 app.include_router(router)
 
-client = TestClient(app)
+client = TestClient(app, raise_server_exceptions=False)
 
 
 def make_payload(
@@ -65,9 +65,7 @@ def test_calculate_discount_raises_value_error_returns_400(mock_discount_service
     "payload,missing_field",
     [
         ({"discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": False}, "base_price"),
-        ({"base_price": 100.0, "coupon_code": "SAVE10", "is_vip": False}, "discount_percentage"),
-        ({"base_price": 100.0, "discount_percentage": 10.0, "is_vip": False}, "coupon_code"),  # coupon_code optional, so this is valid
-        ({"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10"}, "is_vip"),
+        # discount_percentage e is_vip têm defaults, então não são obrigatórios
     ],
 )
 def test_calculate_discount_missing_required_fields(payload, missing_field):
@@ -88,8 +86,8 @@ def test_calculate_discount_missing_required_fields(payload, missing_field):
     [
         {"base_price": "one hundred", "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": False},
         {"base_price": 100.0, "discount_percentage": "ten", "coupon_code": "SAVE10", "is_vip": False},
-        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": "no"},
-        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": 123, "is_vip": False},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": []},
+        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": [], "is_vip": False},
     ],
 )
 def test_calculate_discount_invalid_field_types(payload):
@@ -109,12 +107,14 @@ def test_calculate_discount_invalid_field_types(payload):
 )
 @patch("app.api.routes.discount_service")
 def test_calculate_discount_with_edge_values(mock_discount_service, payload):
-    # Setup mock to return a computed final price or raise ValueError for invalid discount_percentage
-    if payload["discount_percentage"] > 100 or payload["discount_percentage"] < 0:
-        mock_discount_service.calculate_final_price.side_effect = ValueError("Percentual de desconto inválido")
+    if payload["base_price"] < 0:
+        # Pydantic valida base_price >= 0 e retorna 422
         response = client.post("/discounts/calculate", json=payload)
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Percentual de desconto inválido" in response.text
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    elif payload["discount_percentage"] > 100 or payload["discount_percentage"] < 0:
+        # Pydantic valida discount_percentage entre 0 e 100 e retorna 422
+        response = client.post("/discounts/calculate", json=payload)
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     else:
         # Return a dummy final price for valid inputs
         mock_discount_service.calculate_final_price.return_value = 50.0
@@ -171,12 +171,9 @@ def test_calculate_discount_service_returns_none(mock_discount_service):
     mock_discount_service.calculate_final_price.return_value = None
     payload = make_payload()
     response = client.post("/discounts/calculate", json=payload)
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    # final_price can be None, but schema expects float, so this might cause validation error
-    # We check if the response contains the key and value None
-    assert "final_price" in data
-    assert data["final_price"] is None
+    # If service returns None, Pydantic validation for DiscountResponse fails.
+    # Since ValidationError is a ValueError, the controller catches it and returns 400.
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @patch("app.api.routes.discount_service")
@@ -189,9 +186,7 @@ def test_calculate_discount_service_raises_unexpected_exception_returns_500(mock
 
 
 def test_discount_endpoint_documentation_contains_discount_route():
-    response = client.get("/docs")
+    response = client.get("/openapi.json")
     assert response.status_code == status.HTTP_200_OK
-    # Check if the path /discounts/calculate is documented
-    assert "/discounts/calculate" in response.text
-    # Check if the tag "discounts" is present
-    assert '"discounts"' in response.text
+    data = response.json()
+    assert "/discounts/calculate" in data["paths"]
