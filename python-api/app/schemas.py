@@ -1,3 +1,4 @@
+from typing import List
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -44,3 +45,23 @@ class DiscountRequest(BaseModel):
 
 class DiscountResponse(BaseModel):
     final_price: float
+
+
+class CartItemSchema(BaseModel):
+    id: str
+    name: str
+    price: float = Field(..., ge=0)
+    quantity: int = Field(1, ge=1)
+
+
+class CartRequest(BaseModel):
+    items: List[CartItemSchema]
+    coupon_code: str | None = None
+    is_vip: bool = False
+
+
+class CartResponse(BaseModel):
+    subtotal: float
+    tax_amount: float
+    final_price: float
+    items_count: int
