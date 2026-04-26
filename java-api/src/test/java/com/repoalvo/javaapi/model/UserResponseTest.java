@@ -331,7 +331,7 @@ class UserResponseTest {
 
     @Test
     void shouldInitializeVipCorrectlyInAllConstructors() {
-        // Old constructor sets vip true
+        // Old constructor without phoneNumber derives vip from role.
         UserResponse oldUser = new UserResponse(
                 120,
                 "Old Constructor",
@@ -339,7 +339,7 @@ class UserResponseTest {
                 "ACTIVE",
                 "USER"
         );
-        assertThat(oldUser.vip()).isTrue();
+        assertThat(oldUser.vip()).isFalse();
 
         // New constructor with vip parameter true
         UserResponse newUserTrue = new UserResponse(
