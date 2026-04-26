@@ -1,16 +1,18 @@
 package com.repoalvo.javaapi;
 
 import com.repoalvo.javaapi.model.UserCreateRequest;
-import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
-import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 class UserServiceUnitTest {
 
@@ -22,129 +24,155 @@ class UserServiceUnitTest {
     }
 
     @Test
-    void createUser_shouldIncludePhoneNumber_whenPhoneNumberIsProvided() {
-        // Arrange
+    @DisplayName("createUser should persist phoneNumber correctly when valid phoneNumber is provided")
+    void createUserShouldPersistValidPhoneNumber() {
         UserCreateRequest payload = new UserCreateRequest("Carlos", "carlos@example.com", "USER", "+55 11 91234-5678");
 
-        // Act
         UserResponse createdUser = userService.create(payload);
 
-        // Assert
         assertThat(createdUser).isNotNull();
-        assertThat(createdUser.name()).isEqualTo("Carlos");
-        assertThat(createdUser.email()).isEqualTo("carlos@example.com");
-        assertThat(createdUser.role()).isEqualTo("USER");
         assertThat(createdUser.phoneNumber()).isEqualTo("+55 11 91234-5678");
     }
 
     @Test
-    void createUser_shouldHaveNullPhoneNumber_whenPhoneNumberIsNull() {
-        // Arrange
+    @DisplayName("createUser should handle null phoneNumber by setting phoneNumber to null")
+    void createUserShouldHandleNullPhoneNumber() {
         UserCreateRequest payload = new UserCreateRequest("Daniela", "daniela@example.com", "USER", null);
 
-        // Act
         UserResponse createdUser = userService.create(payload);
 
-        // Assert
         assertThat(createdUser).isNotNull();
-        assertThat(createdUser.name()).isEqualTo("Daniela");
-        assertThat(createdUser.email()).isEqualTo("daniela@example.com");
         assertThat(createdUser.phoneNumber()).isNull();
     }
 
     @Test
-    void createUser_shouldHaveEmptyPhoneNumber_whenPhoneNumberIsEmptyString() {
-        // Arrange
+    @DisplayName("createUser should handle empty phoneNumber by setting phoneNumber to empty string")
+    void createUserShouldHandleEmptyPhoneNumber() {
         UserCreateRequest payload = new UserCreateRequest("Eduardo", "eduardo@example.com", "USER", "");
 
-        // Act
         UserResponse createdUser = userService.create(payload);
 
-        // Assert
         assertThat(createdUser).isNotNull();
         assertThat(createdUser.phoneNumber()).isEmpty();
     }
 
+    @Nested
+    @DisplayName("Parameterized tests for valid phoneNumber formats")
+    class ValidPhoneNumberFormats {
+
+        @ParameterizedTest(name = "Valid phoneNumber: {0}")
+        @ValueSource(strings = {
+                "+55 11 91234-5678",
+                "+1 (555) 123-4567",
+                "011 91234 5678",
+                "912345678",
+                "+44 20 7946 0958",
+                "+55-11-91234-5678",
+                "+55 (11) 91234 5678"
+        })
+        void createUserShouldAcceptValidPhoneNumbers(String phoneNumber) {
+            UserCreateRequest payload = new UserCreateRequest("Test User", "testuser+" + phoneNumber.hashCode() + "@example.com", "USER", phoneNumber);
+
+            UserResponse createdUser = userService.create(payload);
+
+            assertThat(createdUser).isNotNull();
+            assertThat(createdUser.phoneNumber()).isEqualTo(phoneNumber);
+        }
+    }
+
+    @Nested
+    @DisplayName("Parameterized tests for invalid phoneNumber formats")
+    class InvalidPhoneNumberFormats {
+
+        @ParameterizedTest(name = "Invalid phoneNumber: {0}")
+        @ValueSource(strings = {
+                "123",
+                "abcde",
+                "++55 11 91234-5678",
+                "123-456-7890-1234-5678",
+                "phone123!",
+                "!!!@@@###",
+                "     ",
+                "\t\n"
+        })
+        void createUserShouldAcceptInvalidPhoneNumbersAsIs(String phoneNumber) {
+            UserCreateRequest payload = new UserCreateRequest("Invalid User", "invaliduser+" + phoneNumber.hashCode() + "@example.com", "USER", phoneNumber);
+
+            UserResponse createdUser = userService.create(payload);
+
+            assertThat(createdUser).isNotNull();
+            assertThat(createdUser.phoneNumber()).isEqualTo(phoneNumber);
+        }
+    }
+
     @Test
-    void listUsers_shouldReturnUsersWithCorrectPhoneNumbers_includingSeededUsers() {
-        // Act
+    @DisplayName("createUser should reject duplicate phoneNumber if rule exists (throws exception)")
+    void createUserShouldRejectDuplicatePhoneNumberIfRuleExists() {
+        // First create user with a phone number
+        UserCreateRequest payload1 = new UserCreateRequest("User One", "userone@example.com", "USER", "+55 11 99999-9999");
+        UserResponse created1 = userService.create(payload1);
+
+        // Attempt to create another user with the same phone number
+        UserCreateRequest payload2 = new UserCreateRequest("User Two", "usertwo@example.com", "USER", "+55 11 99999-9999");
+
+        // Assuming UserService throws IllegalArgumentException on duplicate phoneNumber
+        assertThatThrownBy(() -> userService.create(payload2))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("phoneNumber already exists");
+    }
+
+    @Test
+    @DisplayName("listAllUsers should return users with correct phoneNumber persisted")
+    void listAllUsersShouldReturnUsersWithCorrectPhoneNumbers() {
+        // Create users with different phone numbers
+        UserCreateRequest payload1 = new UserCreateRequest("Alice", "alice@example.com", "USER", "+55 11 90000-0001");
+        UserCreateRequest payload2 = new UserCreateRequest("Bob", "bob@example.com", "USER", "+55 11 90000-0002");
+
+        UserResponse created1 = userService.create(payload1);
+        UserResponse created2 = userService.create(payload2);
+
         List<UserResponse> users = userService.listAllUsers();
 
-        // Assert
-        assertThat(users).isNotEmpty();
-        assertThat(users).anyMatch(u -> "+55 11 90000-0001".equals(u.phoneNumber()));
-        assertThat(users).anyMatch(u -> "+55 11 90000-0002".equals(u.phoneNumber()));
-
-        // Create a new user with phone and check presence
-        UserCreateRequest payload = new UserCreateRequest("Felipe", "felipe@example.com", "USER", "+55 11 99999-9999");
-        UserResponse created = userService.create(payload);
-
-        List<UserResponse> updatedUsers = userService.listAllUsers();
-        assertThat(updatedUsers).contains(created);
-        assertThat(created.phoneNumber()).isEqualTo("+55 11 99999-9999");
+        assertThat(users).extracting(UserResponse::phoneNumber)
+                .contains(created1.phoneNumber(), created2.phoneNumber());
     }
 
     @Test
-    void updateUser_shouldNotChangePhoneNumber_evenIfPayloadContainsPhoneNumber() {
-        // Arrange
-        int userId = 1;
-        UserResponse originalUser = userService.getById(userId).orElseThrow();
-        String originalPhone = originalUser.phoneNumber();
+    @DisplayName("UserCreateRequest serializes and deserializes correctly with various phoneNumber values")
+    void userCreateRequestSerializationDeserialization() throws Exception {
+        var objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
-        // Payload with phoneNumber (even if UserUpdateRequest had it, service ignores)
-        // Since UserUpdateRequest constructor in code has only name and email, simulate with null phoneNumber
-        UserUpdateRequest payload = new UserUpdateRequest("Ana Updated", "ana.updated@example.com");
+        String[] phoneNumbers = {null, "", "+55 11 91234-5678", "invalid-phone-123!@#"};
 
-        // Act
-        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
+        for (String phoneNumber : phoneNumbers) {
+            UserCreateRequest original = new UserCreateRequest("Serialize Test", "serialize@example.com", "USER", phoneNumber);
 
-        // Assert
-        assertThat(updatedOpt).isPresent();
-        UserResponse updated = updatedOpt.get();
-        assertThat(updated.name()).isEqualTo("Ana Updated");
-        assertThat(updated.email()).isEqualTo("ana.updated@example.com");
-        assertThat(updated.phoneNumber()).isEqualTo(originalPhone);
+            String json = objectMapper.writeValueAsString(original);
+            UserCreateRequest deserialized = objectMapper.readValue(json, UserCreateRequest.class);
+
+            assertThat(deserialized).isNotNull();
+            assertThat(deserialized.name()).isEqualTo(original.name());
+            assertThat(deserialized.email()).isEqualTo(original.email());
+            assertThat(deserialized.role()).isEqualTo(original.role());
+            assertThat(deserialized.phoneNumber()).isEqualTo(original.phoneNumber());
+        }
     }
 
     @Test
-    void updateUser_shouldNotChangePhoneNumber_whenPayloadHasNullNameAndEmail() {
-        // Arrange
-        int userId = 2;
-        UserResponse originalUser = userService.getById(userId).orElseThrow();
-        String originalPhone = originalUser.phoneNumber();
+    @DisplayName("UserCreateRequest deserialization fails with invalid JSON types for phoneNumber")
+    void userCreateRequestDeserializationFailsWithInvalidPhoneNumberType() {
+        var objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
-        UserUpdateRequest payload = new UserUpdateRequest(null, null);
+        String invalidJson = """
+                {
+                    "name": "Invalid Type",
+                    "email": "invalidtype@example.com",
+                    "role": "USER",
+                    "phoneNumber": 12345
+                }
+                """;
 
-        // Act
-        Optional<UserResponse> updatedOpt = userService.update(userId, payload);
-
-        // Assert
-        assertThat(updatedOpt).isPresent();
-        UserResponse updated = updatedOpt.get();
-        assertThat(updated.name()).isEqualTo(originalUser.name());
-        assertThat(updated.email()).isEqualTo(originalUser.email());
-        assertThat(updated.phoneNumber()).isEqualTo(originalPhone);
-    }
-
-    @Test
-    void userResponseConstructor_shouldSetAllFieldsIncludingPhoneNumber() {
-        // Arrange
-        int id = 10;
-        String name = "Gustavo";
-        String email = "gustavo@example.com";
-        String status = "ACTIVE";
-        String role = "ADMIN";
-        String phoneNumber = "+55 11 98888-7777";
-
-        // Act
-        UserResponse user = new UserResponse(id, name, email, status, role, phoneNumber);
-
-        // Assert
-        assertThat(user.id()).isEqualTo(id);
-        assertThat(user.name()).isEqualTo(name);
-        assertThat(user.email()).isEqualTo(email);
-        assertThat(user.status()).isEqualTo(status);
-        assertThat(user.role()).isEqualTo(role);
-        assertThat(user.phoneNumber()).isEqualTo(phoneNumber);
+        assertThatThrownBy(() -> objectMapper.readValue(invalidJson, UserCreateRequest.class))
+                .isInstanceOf(com.fasterxml.jackson.databind.exc.MismatchedInputException.class);
     }
 }

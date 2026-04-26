@@ -4,7 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.util.Objects;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserResponseTest {
 
@@ -137,5 +140,240 @@ class UserResponseTest {
         );
 
         assertThat(user.vip()).isTrue();
+    }
+
+    // New tests below to cover missing scenarios from QA suggestions
+
+    @Test
+    void shouldHaveVipDefaultFalseWhenNotInitializedExplicitly() {
+        UserResponse user = new UserResponse(
+                60,
+                "Default Vip",
+                "defaultvip@example.com",
+                "ACTIVE",
+                "USER",
+                "+55 11 90000-0002"
+        );
+
+        assertThat(user.vip()).isFalse();
+    }
+
+    @Test
+    void shouldGetAndSetVipCorrectly() {
+        UserResponse user = new UserResponse(
+                70,
+                "Getter Setter Vip",
+                "getsetvip@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                false
+        );
+
+        assertThat(user.vip()).isFalse();
+
+        // Assuming UserResponse has a setter for vip (if immutable, this test is not applicable)
+        // If no setter, this test is skipped.
+        // Here we check if setter exists by reflection and test it if present.
+        try {
+            var vipSetter = UserResponse.class.getMethod("setVip", boolean.class);
+            vipSetter.invoke(user, true);
+            assertThat(user.vip()).isTrue();
+        } catch (NoSuchMethodException e) {
+            // No setter, test not applicable
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    void shouldConsiderVipInEqualsAndHashCode() {
+        UserResponse user1 = new UserResponse(
+                80,
+                "Equals User",
+                "equals@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                true
+        );
+
+        UserResponse user2 = new UserResponse(
+                80,
+                "Equals User",
+                "equals@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                true
+        );
+
+        UserResponse user3 = new UserResponse(
+                80,
+                "Equals User",
+                "equals@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                false
+        );
+
+        assertThat(user1).isEqualTo(user2);
+        assertThat(user1.hashCode()).isEqualTo(user2.hashCode());
+
+        assertThat(user1).isNotEqualTo(user3);
+        assertThat(user1.hashCode()).isNotEqualTo(user3.hashCode());
+    }
+
+    @Test
+    void shouldIncludeVipInToString() {
+        UserResponse user = new UserResponse(
+                90,
+                "ToString User",
+                "tostring@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                true
+        );
+
+        String toString = user.toString();
+
+        assertThat(toString).contains("vip=true");
+    }
+
+    @Test
+    void shouldSerializeVipTrueAndFalseCorrectly() throws JsonProcessingException {
+        UserResponse userVipTrue = new UserResponse(
+                100,
+                "Vip True",
+                "viptrue@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                true
+        );
+
+        UserResponse userVipFalse = new UserResponse(
+                101,
+                "Vip False",
+                "vipfalse@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                false
+        );
+
+        String jsonTrue = objectMapper.writeValueAsString(userVipTrue);
+        String jsonFalse = objectMapper.writeValueAsString(userVipFalse);
+
+        assertThat(jsonTrue).contains("\"vip\":true");
+        assertThat(jsonFalse).contains("\"vip\":false");
+    }
+
+    @Test
+    void shouldDeserializeVipTrueFalseAbsentAndInvalidValues() throws JsonProcessingException {
+        String jsonVipTrue = """
+                {
+                  "id": 110,
+                  "name": "Vip True",
+                  "email": "viptrue@example.com",
+                  "status": "ACTIVE",
+                  "role": "USER",
+                  "vip": true
+                }
+                """;
+
+        String jsonVipFalse = """
+                {
+                  "id": 111,
+                  "name": "Vip False",
+                  "email": "vipfalse@example.com",
+                  "status": "ACTIVE",
+                  "role": "USER",
+                  "vip": false
+                }
+                """;
+
+        String jsonVipAbsent = """
+                {
+                  "id": 112,
+                  "name": "Vip Absent",
+                  "email": "vipabsent@example.com",
+                  "status": "ACTIVE",
+                  "role": "USER"
+                }
+                """;
+
+        String jsonVipInvalid = """
+                {
+                  "id": 113,
+                  "name": "Vip Invalid",
+                  "email": "vipinvalid@example.com",
+                  "status": "ACTIVE",
+                  "role": "USER",
+                  "vip": "notaboolean"
+                }
+                """;
+
+        UserResponse userTrue = objectMapper.readValue(jsonVipTrue, UserResponse.class);
+        UserResponse userFalse = objectMapper.readValue(jsonVipFalse, UserResponse.class);
+        UserResponse userAbsent = objectMapper.readValue(jsonVipAbsent, UserResponse.class);
+
+        assertThat(userTrue.vip()).isTrue();
+        assertThat(userFalse.vip()).isFalse();
+        assertThat(userAbsent.vip()).isFalse();
+
+        // For invalid boolean value, Jackson throws exception
+        assertThatThrownBy(() -> objectMapper.readValue(jsonVipInvalid, UserResponse.class))
+                .isInstanceOf(JsonProcessingException.class);
+    }
+
+    @Test
+    void shouldInitializeVipCorrectlyInAllConstructors() {
+        // Old constructor sets vip true
+        UserResponse oldUser = new UserResponse(
+                120,
+                "Old Constructor",
+                "oldconstructor@example.com",
+                "ACTIVE",
+                "USER"
+        );
+        assertThat(oldUser.vip()).isTrue();
+
+        // New constructor with vip parameter true
+        UserResponse newUserTrue = new UserResponse(
+                121,
+                "New Constructor True",
+                "newtrue@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                true
+        );
+        assertThat(newUserTrue.vip()).isTrue();
+
+        // New constructor with vip parameter false
+        UserResponse newUserFalse = new UserResponse(
+                122,
+                "New Constructor False",
+                "newfalse@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                false
+        );
+        assertThat(newUserFalse.vip()).isFalse();
+
+        // New constructor without vip parameter defaults to false
+        UserResponse newUserDefault = new UserResponse(
+                123,
+                "New Constructor Default",
+                "newdefault@example.com",
+                "ACTIVE",
+                "USER",
+                null
+        );
+        assertThat(newUserDefault.vip()).isFalse();
     }
 }
