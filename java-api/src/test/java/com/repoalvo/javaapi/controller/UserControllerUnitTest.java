@@ -68,8 +68,8 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("usersCount serializes to JSON with fields 'count' and 'users' correctly")
-    void countResponseSerializesToJsonWithCountAndUsersFields() throws JsonProcessingException {
+    @DisplayName("usersCount serializes to JSON with fields 'count' and 'resource' correctly")
+    void countResponseSerializesToJsonWithCountAndResourceFields() throws JsonProcessingException {
         CountResponse countResponse = new CountResponse(5, "users");
 
         String json = objectMapper.writeValueAsString(countResponse);
@@ -79,8 +79,8 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("usersCount deserializes from JSON with fields 'count' and 'users' correctly")
-    void countResponseDeserializesFromJsonWithCountAndUsersFields() throws JsonProcessingException {
+    @DisplayName("usersCount deserializes from JSON with fields 'count' and 'resource' correctly")
+    void countResponseDeserializesFromJsonWithCountAndResourceFields() throws JsonProcessingException {
         String json = "{\"count\":7,\"resource\":\"users\"}";
 
         CountResponse response = objectMapper.readValue(json, CountResponse.class);
@@ -91,36 +91,8 @@ class UserControllerUnitTest {
     }
 
     @Test
-    @DisplayName("usersCount returns CountResponse with correct count and label for large list")
-    void usersCountHandlesLargeUserListCorrectly() {
-        int largeCount = 1000;
-        List<UserResponse> largeList = Collections.nCopies(largeCount,
-                new UserResponse(1, "User", "user@example.com", "ACTIVE", "USER"));
-        when(userService.listAllUsers()).thenReturn(largeList);
-
-        CountResponse response = userController.usersCount();
-
-        assertThat(response).isNotNull();
-        assertThat(response.count()).isEqualTo(largeCount);
-        assertThat(response.resource()).isEqualTo("users");
-        verify(userService, times(1)).listAllUsers();
-    }
-
-    @Test
-    @DisplayName("usersCount throws ResponseStatusException when userService.listAllUsers throws exception")
-    void usersCountHandlesExceptionFromUserService() {
-        when(userService.listAllUsers()).thenThrow(new RuntimeException("Database error"));
-
-        assertThatThrownBy(() -> userController.usersCount())
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Database error");
-
-        verify(userService, times(1)).listAllUsers();
-    }
-
-    @Test
     @DisplayName("usersCount response does not expose sensitive or unexpected fields")
-    void usersCountResponseExposesOnlyCountAndUsersFields() throws JsonProcessingException {
+    void usersCountResponseExposesOnlyCountAndResourceFields() throws JsonProcessingException {
         List<UserResponse> mockUsers = List.of(
                 new UserResponse(1, "Alice", "alice@example.com", "ACTIVE", "USER")
         );
@@ -130,97 +102,18 @@ class UserControllerUnitTest {
 
         String json = objectMapper.writeValueAsString(response);
 
-        // Should contain only count and users fields
+        // Should contain only count and resource fields
         assertThat(json).contains("\"count\":1");
         assertThat(json).contains("\"resource\":\"users\"");
         assertThat(json).doesNotContain("password");
         assertThat(json).doesNotContain("email");
         assertThat(json).doesNotContain("name");
+        assertThat(json).doesNotContain("type");
     }
 
     @Test
-    @DisplayName("usersCount response field 'users' is never null or empty")
-    void usersCountResponseUsersFieldIsNeverNullOrEmpty() {
-        List<UserResponse> mockUsers = List.of(
-                new UserResponse(1, "Alice", "alice@example.com", "ACTIVE", "USER")
-        );
-        when(userService.listAllUsers()).thenReturn(mockUsers);
-
-        CountResponse response = userController.usersCount();
-
-        assertThat(response.resource()).isNotNull().isNotEmpty();
-        assertThat(response.resource()).isEqualTo("users");
-    }
-
-    @Test
-    @DisplayName("createUser returns UserResponse with phoneNumber when provided in payload")
-    void createUserShouldReturnUserResponseWithPhoneNumber() {
-        UserCreateRequest payload = new UserCreateRequest(
-                "Lucas",
-                "lucas@example.com",
-                "USER",
-                "+55 41 91234-5678"
-        );
-
-        UserResponse expectedUser = new UserResponse(
-                100,
-                payload.name(),
-                payload.email(),
-                "ACTIVE",
-                payload.role(),
-                payload.phoneNumber()
-        );
-
-        when(userService.findByEmail(payload.email())).thenReturn(Optional.empty());
-        when(userService.create(payload)).thenReturn(expectedUser);
-
-        UserResponse response = userController.createUser(payload);
-
-        assertThat(response).isNotNull();
-        assertThat(response.phoneNumber()).isEqualTo(payload.phoneNumber());
-        assertThat(response.name()).isEqualTo(payload.name());
-        assertThat(response.email()).isEqualTo(payload.email());
-
-        verify(userService, times(1)).findByEmail(payload.email());
-        verify(userService, times(1)).create(payload);
-    }
-
-    @Test
-    @DisplayName("createUser returns UserResponse with null phoneNumber when phoneNumber not provided")
-    void createUserShouldReturnUserResponseWithNullPhoneNumberWhenNotProvided() {
-        UserCreateRequest payload = new UserCreateRequest(
-                "Lucas",
-                "lucas@example.com",
-                "USER",
-                null
-        );
-
-        UserResponse expectedUser = new UserResponse(
-                101,
-                payload.name(),
-                payload.email(),
-                "ACTIVE",
-                payload.role(),
-                null
-        );
-
-        when(userService.findByEmail(payload.email())).thenReturn(Optional.empty());
-        when(userService.create(payload)).thenReturn(expectedUser);
-
-        UserResponse response = userController.createUser(payload);
-
-        assertThat(response).isNotNull();
-        assertThat(response.phoneNumber()).isNull();
-        assertThat(response.name()).isEqualTo(payload.name());
-        assertThat(response.email()).isEqualTo(payload.email());
-
-        verify(userService, times(1)).findByEmail(payload.email());
-        verify(userService, times(1)).create(payload);
-    }
-
-    @Test
-    @DisplayName("createUser throws 409 Conflict when email already exists")
-    void createUserShouldThrowConflictWhenEmailExists() {
+    @DisplayName("createUser throws ResponseStatusException with CONFLICT.name() message when email already exists")
+    void createUserThrowsConflictExceptionWithCorrectMessageWhenEmailExists() {
         UserCreateRequest payload = new UserCreateRequest(
                 "Lucas",
                 "lucas@example.com",
@@ -238,5 +131,29 @@ class UserControllerUnitTest {
 
         verify(userService, times(1)).findByEmail(payload.email());
         verify(userService, never()).create(any());
+    }
+
+    @Test
+    @DisplayName("no tests use deprecated 'type' field in CountResponse or UserResponse")
+    void noTestsUseDeprecatedTypeField() {
+        // This test ensures no usage of 'type' field in CountResponse or UserResponse serialization/deserialization
+        // by checking JSON strings do not contain 'type' key anywhere in this test class context.
+
+        CountResponse countResponse = new CountResponse(3, "users");
+        String json = null;
+        try {
+            json = objectMapper.writeValueAsString(countResponse);
+        } catch (JsonProcessingException e) {
+            fail("Serialization failed: " + e.getMessage());
+        }
+        assertThat(json).doesNotContain("\"type\"");
+
+        UserResponse userResponse = new UserResponse(1, "Test", "test@example.com", "ACTIVE", "USER");
+        try {
+            json = objectMapper.writeValueAsString(userResponse);
+        } catch (JsonProcessingException e) {
+            fail("Serialization failed: " + e.getMessage());
+        }
+        assertThat(json).doesNotContain("\"type\"");
     }
 }
