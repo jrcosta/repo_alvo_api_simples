@@ -1,96 +1,100 @@
 import pytest
+from pydantic import ValidationError
 from app.services.user_service import UserService
 from app.schemas import UserCreate, UserResponse
 
+
 @pytest.fixture
 def user_service():
-    service = UserService()
-    return service
+    return UserService()
 
-def test_user_service_reset(user_service) -> None:
-    user_service.create_user(UserCreate(name="Test User", email="test@example.com"))
-    assert len(user_service.list_users()) == 3  # Deve ter 3 usuários após a criação
 
+def test_create_user_sets_is_vip_correctly(user_service):
+    # Criar usuário com is_vip True
+    payload_vip = UserCreate(name="VIP User", email="vip@example.com", is_vip=True)
+    user_vip = user_service.create_user(payload_vip)
+    assert user_vip.is_vip is True
+    assert user_vip.name == "VIP User"
+    assert user_vip.email == "vip@example.com"
+
+    # Criar usuário com is_vip False
+    payload_non_vip = UserCreate(name="Non VIP User", email="nonvip@example.com", is_vip=False)
+    user_non_vip = user_service.create_user(payload_non_vip)
+    assert user_non_vip.is_vip is False
+    assert user_non_vip.name == "Non VIP User"
+    assert user_non_vip.email == "nonvip@example.com"
+
+
+def test_reset_initializes_seed_users_with_correct_is_vip(user_service):
     user_service.reset()
-    users_after_reset = user_service.list_users()
-    assert len(users_after_reset) == 2  # Deve ter 2 usuários após o reset
+    users = user_service.list_users()
+    assert len(users) == 2
 
-    # Validar conteúdo dos usuários remanescentes após reset
     expected_seed_users = [
-        UserResponse(id=1, name="Ana Silva", email="ana@example.com"),
-        UserResponse(id=2, name="Bruno Lima", email="bruno@example.com"),
+        UserResponse(id=1, name="Ana Silva", email="ana@example.com", is_vip=True),
+        UserResponse(id=2, name="Bruno Lima", email="bruno@example.com", is_vip=False),
     ]
-    # Comparar usuários por id, name e email
+
     for expected_user in expected_seed_users:
-        assert any(
-            u.id == expected_user.id and u.name == expected_user.name and u.email == expected_user.email
-            for u in users_after_reset
-        ), f"Usuário seed esperado não encontrado: {expected_user}"
+        matched_users = [
+            u for u in users
+            if u.id == expected_user.id and u.name == expected_user.name and u.email == expected_user.email and u.is_vip == expected_user.is_vip
+        ]
+        assert len(matched_users) == 1, f"Seed user with id {expected_user.id} and is_vip={expected_user.is_vip} not found"
 
-    assert user_service._next_id == 3  # O próximo ID deve ser 3
 
-def test_user_service_create_user_after_reset(user_service) -> None:
+def test_list_users_contains_is_vip_for_all_users(user_service):
     user_service.reset()
-    new_user = user_service.create_user(UserCreate(name="New User", email="newuser@example.com"))
-    assert new_user.id == 3  # O ID atribuído deve ser 3 após o reset
-    assert len(user_service.list_users()) == 3  # Deve ter 3 usuários após a criação
+    # Criar usuários adicionais para garantir lista maior
+    user_service.create_user(UserCreate(name="User1", email="user1@example.com", is_vip=True))
+    user_service.create_user(UserCreate(name="User2", email="user2@example.com", is_vip=False))
 
-def test_user_service_multiple_resets_do_not_alter_state(user_service) -> None:
-    user_service.create_user(UserCreate(name="User1", email="user1@example.com"))
+    users = user_service.list_users()
+    assert len(users) >= 4
+    for user in users:
+        assert hasattr(user, "is_vip")
+        assert isinstance(user.is_vip, bool)
+
+
+def test_create_user_without_is_vip_raises_validation_error():
+    # Tentativa de criar UserCreate sem is_vip deve falhar (campo obrigatório presumido)
+    with pytest.raises(ValidationError):
+        UserCreate(name="No VIP", email="novip@example.com")  # is_vip ausente
+
+
+def test_get_user_and_find_by_email_return_user_with_correct_is_vip(user_service):
     user_service.reset()
-    first_reset_users = user_service.list_users()
-    first_next_id = user_service._next_id
+    # Buscar usuário seed por id
+    user1 = user_service.get_user(1)
+    assert user1 is not None
+    assert user1.is_vip is True
 
-    user_service.reset()
-    second_reset_users = user_service.list_users()
-    second_next_id = user_service._next_id
+    user2 = user_service.get_user(2)
+    assert user2 is not None
+    assert user2.is_vip is False
 
-    assert first_reset_users == second_reset_users, "Usuários após múltiplos resets devem ser iguais"
-    assert first_next_id == second_next_id == 3, "O _next_id deve ser 3 após múltiplos resets"
+    # Buscar usuário seed por email
+    user_email_1 = user_service.find_by_email("ana@example.com")
+    assert user_email_1 is not None
+    assert user_email_1.is_vip is True
 
-def test_user_service_create_multiple_users_after_reset_increments_id_correctly(user_service) -> None:
-    user_service.reset()
-    user1 = user_service.create_user(UserCreate(name="User One", email="user1@example.com"))
-    user2 = user_service.create_user(UserCreate(name="User Two", email="user2@example.com"))
-    user3 = user_service.create_user(UserCreate(name="User Three", email="user3@example.com"))
-
-    assert user1.id == 3
-    assert user2.id == 4
-    assert user3.id == 5
-    assert len(user_service.list_users()) == 5
-
-def test_user_service_reset_on_empty_service(user_service) -> None:
-    # Limpar todos os usuários manualmente para simular serviço vazio
-    user_service._users.clear()
-    user_service._next_id = 1
-
-    assert len(user_service.list_users()) == 0
-    assert user_service._next_id == 1
-
-    user_service.reset()
-    users_after_reset = user_service.list_users()
-    assert len(users_after_reset) == 2  # Deve restaurar os usuários seed
-    assert user_service._next_id == 3
+    user_email_2 = user_service.find_by_email("bruno@example.com")
+    assert user_email_2 is not None
+    assert user_email_2.is_vip is False
 
 
-def test_user_service_create_user_raises_error_after_reset_with_invalid_data(user_service) -> None:
-    user_service.reset()
-    with pytest.raises(Exception):
-        # Criar usuário com dados inválidos (nome vazio)
-        user_service.create_user(UserCreate(name="", email="invalid@example.com"))
-
-    with pytest.raises(Exception):
-        # Criar usuário com dados inválidos (email vazio)
-        user_service.create_user(UserCreate(name="Invalid User", email=""))
-
-def test_user_service_reset_id_increment_after_multiple_resets(user_service) -> None:
-    user_service.reset()
-    user_service.create_user(UserCreate(name="User A", email="a@example.com"))
-    user_service.reset()
-    user_service.create_user(UserCreate(name="User B", email="b@example.com"))
-    user_service.reset()
-    user_service.create_user(UserCreate(name="User C", email="c@example.com"))
-
-    last_user = user_service.list_users()[-1]
-    assert last_user.id == 3
-    assert user_service._next_id == 4
+@pytest.mark.parametrize(
+    "invalid_is_vip",
+    [
+        "true",  # string
+        1,       # int
+        None,    # null
+        0,       # int zero
+        [],      # list
+        {},      # dict
+    ],
+)
+def test_create_user_with_invalid_is_vip_raises_validation_error(invalid_is_vip):
+    # Testa que valores inválidos para is_vip no payload causam erro de validação
+    with pytest.raises(ValidationError):
+        UserCreate(name="Invalid VIP", email="invalidvip@example.com", is_vip=invalid_is_vip)

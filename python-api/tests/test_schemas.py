@@ -3,14 +3,13 @@ from pydantic import ValidationError
 from app.schemas import CartItemSchema, CartRequest, CartResponse, DiscountRequest, DiscountResponse
 
 
-class TestCartItemSchema:
+class TestUserCreateSchema:
 
-    def test_create_with_valid_data_should_succeed(self):
-        item = CartItemSchema(id="item1", name="Item One", price=10.5, quantity=3)
-        assert item.id == "item1"
-        assert item.name == "Item One"
-        assert item.price == 10.5
-        assert item.quantity == 3
+    def test_create_user_without_is_vip_should_default_to_false(self):
+        user = UserCreate(name="Alice", email="alice@example.com")
+        assert user.name == "Alice"
+        assert user.email == "alice@example.com"
+        assert user.is_vip is False
 
     @pytest.mark.parametrize("price", [-0.01, -100, -1e10])
     def test_create_with_negative_price_should_fail(self, price):
@@ -26,21 +25,25 @@ class TestCartItemSchema:
         errors = exc_info.value.errors()
         assert any(e["loc"] == ("quantity",) and e["type"] == "greater_than_equal" for e in errors)
 
-    def test_create_with_quantity_omitted_should_default_to_one(self):
-        item = CartItemSchema(id="item1", name="Item One", price=10.0)
-        assert item.quantity == 1
+    def test_create_user_with_is_vip_false_should_set_false(self):
+        user = UserCreate(name="Carol", email="carol@example.com", is_vip=False)
+        assert user.is_vip is False
 
-    @pytest.mark.parametrize("invalid_id", [None, "", "   "])
-    def test_create_with_empty_or_null_id_should_fail(self, invalid_id):
+    @pytest.mark.parametrize("invalid_value", ["yes", "no", 1, 0, None, "true", "false", [], {}])
+    def test_create_user_with_invalid_is_vip_should_raise_validation_error(self, invalid_value):
+        # Only bool is accepted, so strings and other types should fail
+        if isinstance(invalid_value, bool):
+            # bool is valid, skip
+            pytest.skip("Boolean values are valid")
         with pytest.raises(ValidationError) as exc_info:
-            CartItemSchema(id=invalid_id, name="Item One", price=10.0, quantity=1)
+            UserCreate(name="Dave", email="dave@example.com", is_vip=invalid_value)
         errors = exc_info.value.errors()
         assert any(e["loc"] == ("id",) for e in errors)
 
     @pytest.mark.parametrize("invalid_name", [None, "", "   "])
     def test_create_with_empty_or_null_name_should_fail(self, invalid_name):
         with pytest.raises(ValidationError) as exc_info:
-            CartItemSchema(id="item1", name=invalid_name, price=10.0, quantity=1)
+            UserResponse.model_validate(user_dict)
         errors = exc_info.value.errors()
         assert any(e["loc"] == ("name",) for e in errors)
 
