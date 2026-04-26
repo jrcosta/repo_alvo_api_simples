@@ -1,6 +1,6 @@
 import pytest
 from pydantic import ValidationError
-from app.schemas import CartItemSchema, CartRequest, CartResponse
+from app.schemas import CartItemSchema, CartRequest, CartResponse, DiscountRequest, DiscountResponse
 
 
 class TestCartItemSchema:
@@ -17,14 +17,14 @@ class TestCartItemSchema:
         with pytest.raises(ValidationError) as exc_info:
             CartItemSchema(id="item1", name="Item One", price=price, quantity=1)
         errors = exc_info.value.errors()
-        assert any(e['loc'] == ('base_price',) and (e['type'] == 'greater_than_equal' or e['type'] == 'value_error.number.not_ge') for e in errors)
+        assert any(e["loc"] == ("price",) and e["type"] == "greater_than_equal" for e in errors)
 
     @pytest.mark.parametrize("quantity", [0, -1, -100])
     def test_create_with_zero_or_negative_quantity_should_fail(self, quantity):
         with pytest.raises(ValidationError) as exc_info:
             CartItemSchema(id="item1", name="Item One", price=10.0, quantity=quantity)
         errors = exc_info.value.errors()
-        assert any(e['loc'] == ('discount_percentage',) and (e['type'] in ['greater_than_equal', 'less_than_equal', 'value_error.number.not_ge', 'value_error.number.not_le']) for e in errors)
+        assert any(e["loc"] == ("quantity",) and e["type"] == "greater_than_equal" for e in errors)
 
     def test_create_with_quantity_omitted_should_default_to_one(self):
         item = CartItemSchema(id="item1", name="Item One", price=10.0)
@@ -35,14 +35,14 @@ class TestCartItemSchema:
         with pytest.raises(ValidationError) as exc_info:
             CartItemSchema(id=invalid_id, name="Item One", price=10.0, quantity=1)
         errors = exc_info.value.errors()
-        assert any(e['loc'] == ('id',) and e['type'] == 'value_error.missing' or e['type'] == 'value_error.str.min_length' or e['type'] == 'type_error.str' for e in errors)
+        assert any(e["loc"] == ("id",) for e in errors)
 
     @pytest.mark.parametrize("invalid_name", [None, "", "   "])
     def test_create_with_empty_or_null_name_should_fail(self, invalid_name):
         with pytest.raises(ValidationError) as exc_info:
             CartItemSchema(id="item1", name=invalid_name, price=10.0, quantity=1)
         errors = exc_info.value.errors()
-        assert any(e['loc'] == ('name',) and e['type'] == 'value_error.missing' or e['type'] == 'value_error.str.min_length' or e['type'] == 'type_error.str' for e in errors)
+        assert any(e["loc"] == ("name",) for e in errors)
 
 
 class TestCartRequestSchema:

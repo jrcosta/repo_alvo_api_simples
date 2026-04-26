@@ -1,5 +1,5 @@
 from typing import List
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class HealthResponse(BaseModel):
@@ -52,10 +52,17 @@ class DiscountResponse(BaseModel):
 
 
 class CartItemSchema(BaseModel):
-    id: str
-    name: str
+    id: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
     price: float = Field(..., ge=0)
     quantity: int = Field(1, ge=1)
+
+    @field_validator("id", "name")
+    @classmethod
+    def reject_blank_strings(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value
 
 
 class CartRequest(BaseModel):
