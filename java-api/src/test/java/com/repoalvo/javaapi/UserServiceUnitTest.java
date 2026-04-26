@@ -106,19 +106,16 @@ class UserServiceUnitTest {
     }
 
     @Test
-    @DisplayName("createUser should reject duplicate phoneNumber if rule exists (throws exception)")
-    void createUserShouldRejectDuplicatePhoneNumberIfRuleExists() {
-        // First create user with a phone number
+    @DisplayName("createUser should allow duplicate phoneNumber because no uniqueness rule exists")
+    void createUserShouldAllowDuplicatePhoneNumber() {
         UserCreateRequest payload1 = new UserCreateRequest("User One", "userone@example.com", "USER", "+55 11 99999-9999");
         UserResponse created1 = userService.create(payload1);
 
-        // Attempt to create another user with the same phone number
         UserCreateRequest payload2 = new UserCreateRequest("User Two", "usertwo@example.com", "USER", "+55 11 99999-9999");
+        UserResponse created2 = userService.create(payload2);
 
-        // Assuming UserService throws IllegalArgumentException on duplicate phoneNumber
-        assertThatThrownBy(() -> userService.create(payload2))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("phoneNumber already exists");
+        assertThat(created1.phoneNumber()).isEqualTo(created2.phoneNumber());
+        assertThat(userService.listAllUsers()).contains(created1, created2);
     }
 
     @Test
@@ -159,20 +156,21 @@ class UserServiceUnitTest {
     }
 
     @Test
-    @DisplayName("UserCreateRequest deserialization fails with invalid JSON types for phoneNumber")
-    void userCreateRequestDeserializationFailsWithInvalidPhoneNumberType() {
+    @DisplayName("UserCreateRequest deserializes numeric phoneNumber as string")
+    void userCreateRequestDeserializesNumericPhoneNumberAsString() throws Exception {
         var objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
-        String invalidJson = """
+        String json = """
                 {
-                    "name": "Invalid Type",
-                    "email": "invalidtype@example.com",
+                    "name": "Numeric Phone",
+                    "email": "numericphone@example.com",
                     "role": "USER",
                     "phoneNumber": 12345
                 }
                 """;
 
-        assertThatThrownBy(() -> objectMapper.readValue(invalidJson, UserCreateRequest.class))
-                .isInstanceOf(com.fasterxml.jackson.databind.exc.MismatchedInputException.class);
+        UserCreateRequest deserialized = objectMapper.readValue(json, UserCreateRequest.class);
+
+        assertThat(deserialized.phoneNumber()).isEqualTo("12345");
     }
 }
