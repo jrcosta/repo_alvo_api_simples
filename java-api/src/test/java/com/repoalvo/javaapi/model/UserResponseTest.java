@@ -4,8 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
-import java.util.Objects;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -141,8 +139,6 @@ class UserResponseTest {
 
         assertThat(user.vip()).isTrue();
     }
-
-    // New tests below to cover missing scenarios from QA suggestions
 
     @Test
     void shouldHaveVipDefaultFalseWhenNotInitializedExplicitly() {
@@ -375,5 +371,105 @@ class UserResponseTest {
                 null
         );
         assertThat(newUserDefault.vip()).isFalse();
+    }
+
+    // Additional tests to cover missing scenarios from QA suggestions
+
+    @Test
+    void shouldReturnFalseVipForUserRoleUsingOldConstructor() {
+        UserResponse user = new UserResponse(
+                130,
+                "User Role",
+                "userrole@example.com",
+                "ACTIVE",
+                "USER"
+        );
+        assertThat(user.vip()).isFalse();
+    }
+
+    @Test
+    void shouldReturnTrueVipForAdminRoleUsingOldConstructor() {
+        UserResponse user = new UserResponse(
+                131,
+                "Admin Role",
+                "adminrole@example.com",
+                "ACTIVE",
+                "ADMIN"
+        );
+        assertThat(user.vip()).isTrue();
+    }
+
+    @Test
+    void shouldReturnFalseVipForModeratorRoleUsingOldConstructor() {
+        UserResponse user = new UserResponse(
+                132,
+                "Moderator Role",
+                "moderator@example.com",
+                "ACTIVE",
+                "MODERATOR"
+        );
+        assertThat(user.vip()).isFalse();
+    }
+
+    @Test
+    void shouldReturnFalseVipForGuestRoleUsingOldConstructor() {
+        UserResponse user = new UserResponse(
+                133,
+                "Guest Role",
+                "guest@example.com",
+                "ACTIVE",
+                "GUEST"
+        );
+        assertThat(user.vip()).isFalse();
+    }
+
+    @Test
+    void shouldReturnFalseVipForUnknownRoleUsingOldConstructor() {
+        UserResponse user = new UserResponse(
+                134,
+                "Unknown Role",
+                "unknown@example.com",
+                "ACTIVE",
+                "UNKNOWN_ROLE"
+        );
+        assertThat(user.vip()).isFalse();
+    }
+
+    @Test
+    void shouldSerializeAndDeserializeUserWithOldConstructorMaintainingVipConsistency() throws JsonProcessingException {
+        UserResponse originalUser = new UserResponse(
+                140,
+                "Serialize Old Constructor",
+                "serializeold@example.com",
+                "ACTIVE",
+                "ADMIN"
+        );
+        assertThat(originalUser.vip()).isTrue();
+
+        String json = objectMapper.writeValueAsString(originalUser);
+        UserResponse deserializedUser = objectMapper.readValue(json, UserResponse.class);
+
+        assertThat(deserializedUser.vip()).isEqualTo(originalUser.vip());
+        assertThat(deserializedUser.role()).isEqualTo(originalUser.role());
+        assertThat(deserializedUser.phoneNumber()).isNull();
+    }
+
+    @Test
+    void shouldSerializeAndDeserializeUserWithOldConstructorAndNonVipRole() throws JsonProcessingException {
+        UserResponse originalUser = new UserResponse(
+                141,
+                "Serialize Old Constructor NonVip",
+                "serializeoldnonvip@example.com",
+                "ACTIVE",
+                "USER"
+        );
+        assertThat(originalUser.vip()).isFalse();
+
+        String json = objectMapper.writeValueAsString(originalUser);
+        UserResponse deserializedUser = objectMapper.readValue(json, UserResponse.class);
+
+        assertThat(deserializedUser.vip()).isEqualTo(originalUser.vip());
+        assertThat(deserializedUser.role()).isEqualTo(originalUser.role());
+        assertThat(deserializedUser.phoneNumber()).isNull();
     }
 }
