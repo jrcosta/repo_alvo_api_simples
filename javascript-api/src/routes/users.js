@@ -113,6 +113,16 @@ router.get('/by-email', (req, res) => {
   }
 });
 
+router.get('/has-email', (req, res) => {
+  const email = req.query.email;
+  if (!email || !email.trim()) {
+    return res.status(400).json({ detail: "Parâmetro email é obrigatório" });
+  }
+
+  const exists = Boolean(userService.findByEmail(email.trim()));
+  return res.json({ email: email.trim(), exists });
+});
+
 router.get('/:user_id/age-estimate', async (req, res) => {
   const userId = parseInt(req.params.user_id, 10);
   const user = userService.getUser(userId);

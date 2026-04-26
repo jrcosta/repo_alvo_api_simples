@@ -65,19 +65,42 @@ public class UserService {
             if (existing.id() == userId) {
                 String updatedName = (payload.name() != null) ? payload.name() : existing.name();
                 String updatedEmail = (payload.email() != null) ? payload.email() : existing.email();
+                String updatedRole = (payload.role() != null) ? payload.role() : existing.role();
+                String updatedPhone = (payload.phoneNumber() != null) ? payload.phoneNumber() : existing.phoneNumber();
+
                 UserResponse updated = new UserResponse(
                         existing.id(),
                         updatedName,
                         updatedEmail,
                         existing.status(),
-                        existing.role(),
-                        existing.phoneNumber()
+                        updatedRole,
+                        updatedPhone
                 );
                 users.set(i, updated);
                 return Optional.of(updated);
             }
         }
         return Optional.empty();
+    }
+    public synchronized UserResponse update(int userId, UserCreateRequest payload) {
+        UserUpdateRequest updateRequest = new UserUpdateRequest(
+                payload.name(),
+                payload.email(),
+                payload.role(),
+                payload.phoneNumber()
+        );
+        return update(userId, updateRequest).orElseThrow(() -> new RuntimeException("User not found: " + userId));
+    }
+
+    public synchronized void delete(int userId) {
+        users.removeIf(u -> u.id() == userId);
+    }
+
+    public synchronized List<UserResponse> searchByPhoneNumber(String phoneNumber) {
+        if (phoneNumber == null) return List.of();
+        return users.stream()
+                .filter(u -> phoneNumber.equals(u.phoneNumber()))
+                .toList();
     }
 }
 
