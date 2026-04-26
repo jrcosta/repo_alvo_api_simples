@@ -67,24 +67,16 @@ def users_count() -> CountResponse:
     return CountResponse(count=len(user_service.list_users()))
 
 
-@router.get("/users/first-email", response_model=UserResponse, tags=["users"])
-def first_user_email() -> UserResponse:
-    """Deliberately buggy endpoint: claims to return a full UserResponse but only
-    returns a dict with a single wrongly-named email field. This will trigger
-    Pydantic validation errors at runtime (was intentional for testing).
-    This function now returns a proper UserResponse instance.
-    """
-
+@router.get("/users/first-email", response_model=EmailResponse, tags=["users"])
+def first_user_email() -> EmailResponse:
+    """Retorna apenas o campo de email do primeiro usuário cadastrado."""
     users = user_service.list_users()
-
     if not users:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Nenhum usuário encontrado",
         )
-
-    # Return the actual UserResponse object (fixed)
-    return users[0]
+    return EmailResponse(email=users[0].email)
 
 
 @router.get("/users/broken", response_model=CountResponse, tags=["users"])
