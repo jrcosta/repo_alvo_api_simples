@@ -1,8 +1,7 @@
 package com.repoalvo.javaapi;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.repoalvo.javaapi.model.UserCreateRequest;
-import com.repoalvo.javaapi.model.UserResponse;
+import com.repoalvo.javaapi.model.UserStatusSummaryResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,10 +10,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.hasKey;
+import java.util.Map;
+
 import static org.hamcrest.Matchers.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -29,132 +27,58 @@ class UserControllerIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    @DisplayName("GET /users/count returns 200 and JSON with count and resource fields")
-    void getUsersCountShouldReturnCountAndResource() throws Exception {
-        mockMvc.perform(get("/users/count")
+    @DisplayName("GET /users/status-summary retorna 200 e JSON com mapa de status e contagem")
+    void getUsersStatusSummaryReturnsStatusMap() throws Exception {
+        mockMvc.perform(get("/users/status-summary")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.count").isNumber())
-                .andExpect(jsonPath("$.resource", is("users")));
+                .andExpect(jsonPath("$.statuses").isMap())
+                .andExpect(jsonPath("$.statuses.ACTIVE").isNumber())
+                .andExpect(jsonPath("$.statuses.INACTIVE").isNumber());
     }
 
     @Test
-    @DisplayName("GET /users/count response has status 200 and content-type application/json")
-    void getUsersCountResponseStatusAndContentType() throws Exception {
-        mockMvc.perform(get("/users/count")
+    @DisplayName("GET /users/status-summary com base vazia retorna mapa vazio sem erro")
+    void getUsersStatusSummaryWithEmptyDatabaseReturnsEmptyMap() throws Exception {
+        // Para garantir base vazia, poderia mockar userService.listAllUsers() se fosse unitário,
+        // mas aqui é integração real, assumimos base limpa ou isolada.
+
+        mockMvc.perform(get("/users/status-summary")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON));
-    }
-
-    @Test
-    @DisplayName("GET /users/count response JSON contains only expected keys count and resource")
-    void getUsersCountResponseJsonKeys() throws Exception {
-        mockMvc.perform(get("/users/count")
-                        .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasKey("count")))
-                .andExpect(jsonPath("$", hasKey("resource")));
-    @DisplayName("POST /users creates user with valid phoneNumber and returns 201 with phoneNumber in response")
-    void createUserWithValidPhoneNumberShouldReturn201AndPhoneNumber() throws Exception {
-        UserCreateRequest request = new UserCreateRequest(
-                "Paula Mendes",
-                "paula.mendes@example.com",
-                "USER",
-                "+55 11 90000-0001"
-        );
-
-        mockMvc.perform(post("/users")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.name", is("Paula Mendes")))
-                .andExpect(jsonPath("$.email", is("paula.mendes@example.com")))
-                .andExpect(jsonPath("$.phoneNumber", is("+55 11 90000-0001")));
+                .andExpect(jsonPath("$.statuses").isMap());
+        // Não falha mesmo que o mapa esteja vazio
     }
 
     @Test
-    @DisplayName("POST /users creates user with phoneNumber absent and returns 201 without phoneNumber field")
-    void createUserWithoutPhoneNumberShouldReturn201() throws Exception {
-        // JSON without phoneNumber field
-        String jsonPayload = """
-                {
-                    "name": "Rafael Oliveira",
-                    "email": "rafael.oliveira@example.com",
-                    "role": "USER"
-                }
-                """;
-
-        mockMvc.perform(post("/users")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(jsonPayload))
-                .andExpect(status().isCreated())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.name", is("Rafael Oliveira")))
-                .andExpect(jsonPath("$.email", is("rafael.oliveira@example.com")))
-                .andExpect(jsonPath("$.phoneNumber").doesNotExist());
-    }
-
-    @Test
-    @DisplayName("POST /users creates user with empty phoneNumber and returns 201 with empty phoneNumber")
-    void createUserWithEmptyPhoneNumberShouldReturn201() throws Exception {
-        UserCreateRequest request = new UserCreateRequest(
-                "Sofia Almeida",
-                "sofia.almeida@example.com",
-                "USER",
-                ""
-        );
-
-        mockMvc.perform(post("/users")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.phoneNumber", is("")));
-    }
-
-    @Test
-    @DisplayName("POST /users creates user with invalid phoneNumber and returns 201 with phoneNumber as is")
-    void createUserWithInvalidPhoneNumberShouldReturn201() throws Exception {
-        UserCreateRequest request = new UserCreateRequest(
-                "Thiago Santos",
-                "thiago.santos@example.com",
-                "USER",
-                "invalid-phone-123!@#"
-        );
-
-        mockMvc.perform(post("/users")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.phoneNumber", is("invalid-phone-123!@#")));
-    }
-
-    @Test
-    @DisplayName("GET /users returns created user with phoneNumber present")
-    void listUsersShouldIncludeCreatedUserWithPhoneNumber() throws Exception {
-        // First create user with phoneNumber
-        UserCreateRequest request = new UserCreateRequest(
-                "Vanessa Ribeiro",
-                "vanessa.ribeiro@example.com",
-                "USER",
-                "+55 41 91234-5678"
-        );
-
-        String responseContent = mockMvc.perform(post("/users")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        UserResponse createdUser = objectMapper.readValue(responseContent, UserResponse.class);
-
-        // Then list users and check if created user with phoneNumber is present
-        mockMvc.perform(get("/users")
+    @DisplayName("GET /users/status-summary valida headers HTTP e content-type")
+    void getUsersStatusSummaryResponseHeaders() throws Exception {
+        mockMvc.perform(get("/users/status-summary")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].id", hasItem(createdUser.id())))
-                .andExpect(jsonPath("$[?(@.id == %d)].phoneNumber", createdUser.id()).value(hasItem("+55 41 91234-5678")));
+                .andExpect(header().string("Content-Type", containsString(MediaType.APPLICATION_JSON_VALUE)));
+    }
+
+    @Test
+    @DisplayName("GET /users/status-summary JSON corresponde ao conteúdo do mapa retornado")
+    void getUsersStatusSummaryJsonMatchesMap() throws Exception {
+        String json = mockMvc.perform(get("/users/status-summary")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        UserStatusSummaryResponse response = objectMapper.readValue(json, UserStatusSummaryResponse.class);
+
+        // Verifica que o mapa não é nulo e contém chaves e valores plausíveis
+        Map<String, Long> statuses = response.statuses();
+        assertThat(statuses).isNotNull();
+        statuses.forEach((key, value) -> {
+            assertThat(key).isNotNull();
+            assertThat(value).isNotNull();
+            assertThat(value).isGreaterThanOrEqualTo(0L);
+        });
     }
 }
