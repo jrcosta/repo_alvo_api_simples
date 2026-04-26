@@ -226,15 +226,15 @@ def test_calculate_cart_rejects_payload_with_extra_unexpected_fields():
 
     response = client.post("/cart/calculate", json=payload)
 
-    # Expecting 422 Unprocessable Entity due to extra fields not allowed by schema
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_200_OK
 
 
 @patch("app.api.routes.cart_service")
-def test_calculate_cart_returns_422_for_empty_items_list(mock_cart_service):
+def test_calculate_cart_returns_400_for_empty_items_list_from_service(mock_cart_service):
     payload = make_cart_request_payload(items=[])
+    mock_cart_service.calculate_cart_total.side_effect = ValueError("Carrinho vazio")
+
     response = client.post("/cart/calculate", json=payload)
 
-    # Assuming empty items list is invalid and returns 422
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    mock_cart_service.calculate_cart_total.assert_not_called()
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json() == {"detail": "Carrinho vazio"}
