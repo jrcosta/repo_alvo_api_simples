@@ -181,7 +181,7 @@ Se a API externa falhar, `age` e `count` serão `null`.
 |---|---|
 | `HealthResponse` | `status: str` |
 | `UserCreate` | `name: str`, `email: EmailStr` |
-| `UserResponse` | `id: int`, `name: str`, `email: EmailStr` |
+| `UserResponse` | `id: int`, `name: str`, `email: EmailStr`, `vip: bool` |
 | `CountResponse` | `count: int` |
 | `EmailResponse` | `email: EmailStr` |
 | `AgeEstimateResponse` | `name: str`, `age: int \| None`, `count: int \| None` |
