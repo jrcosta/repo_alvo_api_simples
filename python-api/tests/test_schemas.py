@@ -1,6 +1,14 @@
 import pytest
 from pydantic import ValidationError
-from app.schemas import CartItemSchema, CartRequest, CartResponse, DiscountRequest, DiscountResponse
+from app.schemas import (
+    CartItemSchema,
+    CartRequest,
+    CartResponse,
+    DiscountRequest,
+    DiscountResponse,
+    UserCreate,
+    UserResponse,
+)
 
 
 class TestUserCreateSchema:
@@ -31,17 +39,19 @@ class TestUserCreateSchema:
 
     @pytest.mark.parametrize("invalid_value", ["yes", "no", 1, 0, None, "true", "false", [], {}])
     def test_create_user_with_invalid_is_vip_should_raise_validation_error(self, invalid_value):
-        # Only bool is accepted, so strings and other types should fail
-        if isinstance(invalid_value, bool):
-            # bool is valid, skip
-            pytest.skip("Boolean values are valid")
         with pytest.raises(ValidationError) as exc_info:
             UserCreate(name="Dave", email="dave@example.com", is_vip=invalid_value)
         errors = exc_info.value.errors()
-        assert any(e["loc"] == ("id",) for e in errors)
+        assert any(e["loc"] == ("is_vip",) for e in errors)
 
     @pytest.mark.parametrize("invalid_name", [None, "", "   "])
     def test_create_with_empty_or_null_name_should_fail(self, invalid_name):
+        user_dict = {
+            "id": 1,
+            "name": invalid_name,
+            "email": "alice@example.com",
+            "is_vip": False,
+        }
         with pytest.raises(ValidationError) as exc_info:
             UserResponse.model_validate(user_dict)
         errors = exc_info.value.errors()

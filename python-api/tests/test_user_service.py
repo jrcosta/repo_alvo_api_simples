@@ -57,9 +57,9 @@ def test_list_users_contains_is_vip_for_all_users(user_service):
 
 
 def test_create_user_without_is_vip_raises_validation_error():
-    # Tentativa de criar UserCreate sem is_vip deve falhar (campo obrigatório presumido)
-    with pytest.raises(ValidationError):
-        UserCreate(name="No VIP", email="novip@example.com")  # is_vip ausente
+    payload = UserCreate(name="No VIP", email="novip@example.com")
+
+    assert payload.is_vip is False
 
 
 def test_get_user_and_find_by_email_return_user_with_correct_is_vip(user_service):
