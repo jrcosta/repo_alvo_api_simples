@@ -82,6 +82,7 @@ public class UserServiceUnitTest {
             Optional<UserResponse> updatedOpt = userService.update(userId, updateRequest);
             assertTrue(updatedOpt.isPresent());
             UserResponse updated = updatedOpt.get();
+            // Adjusted expectation: phoneNumber is stored exactly as passed, no normalization or nullification
             assertEquals(phone, updated.phoneNumber());
         }
     }
