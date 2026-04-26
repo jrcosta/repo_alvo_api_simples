@@ -27,6 +27,7 @@ class UserResponseTest {
         assertThat(user.status()).isEqualTo("ACTIVE");
         assertThat(user.role()).isEqualTo("USER");
         assertThat(user.phoneNumber()).isEqualTo("+55 11 90000-0001");
+        assertThat(user.vip()).isFalse();
     }
 
     @Test
@@ -45,6 +46,7 @@ class UserResponseTest {
         assertThat(user.status()).isEqualTo("INACTIVE");
         assertThat(user.role()).isEqualTo("ADMIN");
         assertThat(user.phoneNumber()).isNull();
+        assertThat(user.vip()).isTrue();
     }
 
     @Test
@@ -64,6 +66,7 @@ class UserResponseTest {
         assertThat(json).contains("\"id\":20");
         assertThat(json).contains("\"name\":\"Serialize User\"");
         assertThat(json).contains("\"email\":\"serialize@example.com\"");
+        assertThat(json).contains("\"vip\":false");
     }
 
     @Test
@@ -104,6 +107,7 @@ class UserResponseTest {
         assertThat(user.role()).isEqualTo("USER");
         // phoneNumber should be null when absent in JSON
         assertThat(user.phoneNumber()).isNull();
+        assertThat(user.vip()).isFalse();
     }
 
     @Test
@@ -118,5 +122,20 @@ class UserResponseTest {
         );
 
         assertThat(user.phoneNumber()).isNull();
+    }
+
+    @Test
+    void shouldAllowExplicitVipValue() {
+        UserResponse user = new UserResponse(
+                50,
+                "Manual Vip",
+                "manualvip@example.com",
+                "ACTIVE",
+                "USER",
+                null,
+                true
+        );
+
+        assertThat(user.vip()).isTrue();
     }
 }
