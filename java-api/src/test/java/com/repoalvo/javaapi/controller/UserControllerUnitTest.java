@@ -14,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -49,7 +50,7 @@ class UserControllerUnitTest {
 
         assertThat(response).isNotNull();
         assertThat(response.count()).isEqualTo(mockUsers.size());
-        assertThat(response.type()).isEqualTo("users");
+        assertThat(response.resource()).isEqualTo("users");
         verify(userService, times(1)).listAllUsers();
     }
 
@@ -62,7 +63,7 @@ class UserControllerUnitTest {
 
         assertThat(response).isNotNull();
         assertThat(response.count()).isZero();
-        assertThat(response.type()).isEqualTo("users");
+        assertThat(response.resource()).isEqualTo("users");
         verify(userService, times(1)).listAllUsers();
     }
 
@@ -74,19 +75,19 @@ class UserControllerUnitTest {
         String json = objectMapper.writeValueAsString(countResponse);
 
         assertThat(json).contains("\"count\":5");
-        assertThat(json).contains("\"users\":\"users\"");
+        assertThat(json).contains("\"resource\":\"users\"");
     }
 
     @Test
     @DisplayName("usersCount deserializes from JSON with fields 'count' and 'users' correctly")
     void countResponseDeserializesFromJsonWithCountAndUsersFields() throws JsonProcessingException {
-        String json = "{\"count\":7,\"users\":\"users\"}";
+        String json = "{\"count\":7,\"resource\":\"users\"}";
 
         CountResponse response = objectMapper.readValue(json, CountResponse.class);
 
         assertThat(response).isNotNull();
         assertThat(response.count()).isEqualTo(7);
-        assertThat(response.type()).isEqualTo("users");
+        assertThat(response.resource()).isEqualTo("users");
     }
 
     @Test
@@ -101,7 +102,7 @@ class UserControllerUnitTest {
 
         assertThat(response).isNotNull();
         assertThat(response.count()).isEqualTo(largeCount);
-        assertThat(response.type()).isEqualTo("users");
+        assertThat(response.resource()).isEqualTo("users");
         verify(userService, times(1)).listAllUsers();
     }
 
@@ -131,7 +132,7 @@ class UserControllerUnitTest {
 
         // Should contain only count and users fields
         assertThat(json).contains("\"count\":1");
-        assertThat(json).contains("\"users\":\"users\"");
+        assertThat(json).contains("\"resource\":\"users\"");
         assertThat(json).doesNotContain("password");
         assertThat(json).doesNotContain("email");
         assertThat(json).doesNotContain("name");
@@ -147,8 +148,11 @@ class UserControllerUnitTest {
 
         CountResponse response = userController.usersCount();
 
-        assertThat(response.type()).isNotNull().isNotEmpty();
-        assertThat(response.type()).isEqualTo("users");
+        assertThat(response.resource()).isNotNull().isNotEmpty();
+        assertThat(response.resource()).isEqualTo("users");
+    }
+
+    @Test
     @DisplayName("createUser returns UserResponse with phoneNumber when provided in payload")
     void createUserShouldReturnUserResponseWithPhoneNumber() {
         UserCreateRequest payload = new UserCreateRequest(
@@ -230,7 +234,7 @@ class UserControllerUnitTest {
 
         assertThatThrownBy(() -> userController.createUser(payload))
                 .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining(CONFLICT.getReasonPhrase());
+                .hasMessageContaining(CONFLICT.name());
 
         verify(userService, times(1)).findByEmail(payload.email());
         verify(userService, never()).create(any());

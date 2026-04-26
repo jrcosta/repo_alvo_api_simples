@@ -1,4 +1,4 @@
-package com.repoalvo.javaapi;
+package com.repoalvo.javaapi.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoalvo.javaapi.model.UserCreateRequest;
@@ -56,6 +56,9 @@ class UserControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasKey("count")))
                 .andExpect(jsonPath("$", hasKey("resource")));
+    }
+
+    @Test
     @DisplayName("POST /users creates user with valid phoneNumber and returns 201 with phoneNumber in response")
     void createUserWithValidPhoneNumberShouldReturn201AndPhoneNumber() throws Exception {
         UserCreateRequest request = new UserCreateRequest(
