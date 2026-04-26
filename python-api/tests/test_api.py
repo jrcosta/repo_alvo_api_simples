@@ -1,280 +1,227 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-from app.api import routes
-from app.schemas import CartRequest, CartResponse, CartRequest
-from fastapi import status
-from pydantic import ValidationError
+from app.api.routes import router, search_users, user_service, UserResponse
+from fastapi import FastAPI
 
-client = TestClient(routes.router)
+app = FastAPI()
+app.include_router(router)
 
-client = TestClient(app, raise_server_exceptions=False)
-
-def make_cart_request_payload(items=None, coupon_code=None, is_vip=False):
-    if items is None:
-        items = [{"product_id": 1, "quantity": 2, "price": 10.0}]
-    payload = {
-        "items": items,
-        "coupon_code": coupon_code,
-        "is_vip": is_vip,
-    }
-    # Remove keys with None values to simulate optional omission
-    return {k: v for k, v in payload.items() if v is not None}
+client = TestClient(app)
 
 
-@patch("app.api.routes.cart_service")
-def test_calculate_cart_returns_cart_response_with_correct_total(mock_cart_service):
-    # Arrange
-    items = [
-        {"product_id": 1, "quantity": 2, "price": 10.0},
-        {"product_id": 2, "quantity": 1, "price": 20.0},
+class UserWithoutIsVip:
+    def __init__(self, id, name, email):
+        self.id = id
+        self.name = name
+        self.email = email
+        # no is_vip attribute
+
+
+@pytest.fixture
+def mock_users(monkeypatch):
+    users = [
+        UserResponse(id=1, name="Ana Silva", email="ana@example.com", status="ACTIVE", role="USER", is_vip=True),
+        UserResponse(id=2, name="Bruno Lima", email="bruno@example.com", status="ACTIVE", role="USER", is_vip=False),
+        UserResponse(id=3, name="Mariana Costa", email="mariana@example.com", status="ACTIVE", role="USER", is_vip=True),
+        UserResponse(id=4, name="Olivia", email="olivia@example.com", status="ACTIVE", role="USER", is_vip=False),
+        UserResponse(id=5, name="Vipiana", email="vipiana@example.com", status="ACTIVE", role="USER", is_vip=True),
+        UserResponse(id=6, name="NoVipUser", email="novip@example.com", status="ACTIVE", role="USER", is_vip=False),
     ]
-    coupon_code = None
-    is_vip = False
-    expected_result = {
-        "total": 40.0,
-        "discount": 0.0,
-        "final_total": 40.0,
-        "items": items,
-    }
-    mock_cart_service.calculate_cart_total.return_value = expected_result
 
-    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
+    def mock_list_users(limit=None, offset=None):
+        return users
 
-    # Act
-    response = client.post("/cart/calculate", json=payload)
+    monkeypatch.setattr(user_service, "list_users", mock_list_users)
+    return users
 
-    # Assert
-    assert response.status_code == status.HTTP_200_OK
+
+def test_search_users_without_prefix_returns_all_matching_users(mock_users):
+    # Query without vip: prefix, should return all users whose name contains "ana" case-insensitive
+    results = search_users("ana")
+    assert isinstance(results, list)
+    assert all(isinstance(u, UserResponse) for u in results)
+    # Should include VIP and non-VIP users with "ana" in name
+    expected_ids = {1, 3}  # Ana Silva and Mariana Costa
+    result_ids = {u.id for u in results}
+    assert expected_ids == result_ids
+
+
+def test_search_users_with_vip_prefix_returns_only_vip_users_with_term(mock_users):
+    # Query with vip: prefix and term "ana"
+    results = search_users("vip:ana")
+    assert isinstance(results, list)
+    assert all(isinstance(u, UserResponse) for u in results)
+    # Only VIP users with "ana" in name
+    expected_ids = {1, 3}  # Ana Silva and Mariana Costa (both VIP)
+    result_ids = {u.id for u in results}
+    assert expected_ids == result_ids
+    # No non-VIP users included
+    assert all(getattr(u, "is_vip", False) for u in results)
+
+
+def test_search_users_with_vip_prefix_and_empty_term_returns_all_vip_users(mock_users):
+    # Query with vip: prefix and empty term
+    results = search_users("vip:")
+    assert isinstance(results, list)
+    # Should return all VIP users regardless of name
+    expected_ids = {1, 3, 5}  # Ana Silva, Mariana Costa, Vipiana
+    result_ids = {u.id for u in results}
+    assert expected_ids == result_ids
+    # All users must be VIP
+    assert all(getattr(u, "is_vip", False) for u in results)
+
+
+def test_search_users_with_vip_prefix_and_nonexistent_term_returns_empty_list(mock_users):
+    # Query with vip: prefix and term that does not exist
+    results = search_users("vip:xyz")
+    assert isinstance(results, list)
+    assert results == []
+
+
+@pytest.mark.parametrize("query", ["VIP:ana", "ViP:ana"])
+def test_search_users_vip_prefix_case_insensitive(query, mock_users):
+    results = search_users(query)
+    expected_ids = {1, 3}  # Ana Silva and Mariana Costa (VIP)
+    result_ids = {u.id for u in results}
+    assert expected_ids == result_ids
+    assert all(getattr(u, "is_vip", False) for u in results)
+
+
+def test_search_users_with_vip_in_middle_of_term_searches_normally(mock_users):
+    # Query with "vip:" in the middle of the term, should not activate VIP filter
+    results = search_users("olivip:ia")
+    assert isinstance(results, list)
+    # Should match users whose name contains "olivip:ia" case-insensitive
+    # None of the mock users have this substring, so expect empty list
+    assert results == []
+
+
+def test_search_users_handles_user_without_is_vip(monkeypatch):
+    # Prepare users list with one user missing is_vip attribute
+    users = [
+        UserResponse(id=1, name="Ana Silva", email="ana@example.com", status="ACTIVE", role="USER", is_vip=True),
+        UserWithoutIsVip(id=99, name="No VIP Field", email="novipfield@example.com"),
+    ]
+
+    def mock_list_users(limit=None, offset=None):
+        return users
+
+    monkeypatch.setattr(user_service, "list_users", mock_list_users)
+
+    # Query with vip: prefix, should not raise AttributeError, user without is_vip is ignored
+    results = search_users("vip:ana")
+    assert isinstance(results, list)
+    # Only user with is_vip True and name containing "ana" should be returned
+    assert len(results) == 1
+    assert results[0].id == 1
+
+    # Query without vip: prefix, should include user without is_vip if name matches
+    results_no_prefix = search_users("no vip")
+    # The user without is_vip has name "No VIP Field" which contains "no vip" case-insensitive
+    # So it should be included
+    assert any(u.id == 99 for u in results_no_prefix)
+
+
+def test_search_users_returns_list_of_userresponse(mock_users):
+    results = search_users("ana")
+    assert isinstance(results, list)
+    for user in results:
+        assert isinstance(user, UserResponse)
+
+
+def test_search_users_filters_out_non_vip_when_vip_prefix_used(mock_users):
+    results = search_users("vip:ana")
+    # All returned users must have is_vip True
+    assert all(getattr(u, "is_vip", False) for u in results)
+    # No non-VIP users should be present
+    non_vip_users = [u for u in results if not getattr(u, "is_vip", False)]
+    assert len(non_vip_users) == 0
+
+
+def test_get_users_search_endpoint_without_prefix_returns_expected_results(mock_users):
+    response = client.get("/users/search", params={"q": "ana"})
+    assert response.status_code == 200
     data = response.json()
-    assert data["total"] == expected_result["total"]
-    assert data["discount"] == expected_result["discount"]
-    assert data["final_total"] == expected_result["final_total"]
-    assert data["items"] == expected_result["items"]
-    mock_cart_service.calculate_cart_total.assert_called_once()
-    # Validate that items passed to service are dicts (model_dump equivalent)
-    called_args, called_kwargs = mock_cart_service.calculate_cart_total.call_args
-    assert isinstance(called_kwargs["items"], list)
-    for item in called_kwargs["items"]:
-        assert isinstance(item, dict)
-    assert called_kwargs["coupon_code"] == coupon_code
-    assert called_kwargs["is_vip"] == is_vip
+    assert isinstance(data, list)
+    # Should include both VIP and non-VIP users with "ana" in name
+    returned_ids = {u["id"] for u in data}
+    expected_ids = {1, 3}
+    assert expected_ids == returned_ids
 
 
-@patch("app.api.routes.cart_service")
-def test_calculate_cart_applies_coupon_discount_correctly(mock_cart_service):
-    # Arrange
-    items = [{"product_id": 1, "quantity": 3, "price": 15.0}]
-    coupon_code = "VALIDCOUPON"
-    is_vip = False
-    expected_result = {
-        "total": 45.0,
-        "discount": 5.0,
-        "final_total": 40.0,
-        "items": items,
-    }
-    mock_cart_service.calculate_cart_total.return_value = expected_result
-
-    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
-
-    # Act
-    response = client.post("/cart/calculate", json=payload)
-
-    # Assert
-    assert response.status_code == status.HTTP_200_OK
+def test_get_users_search_endpoint_with_vip_prefix_returns_only_vip_users(mock_users):
+    response = client.get("/users/search", params={"q": "vip:ana"})
+    assert response.status_code == 200
     data = response.json()
-    assert data["discount"] == expected_result["discount"]
-    assert data["final_total"] == expected_result["final_total"]
-    mock_cart_service.calculate_cart_total.assert_called_once_with(
-        items=[{"product_id": 1, "quantity": 3, "price": 15.0}],
-        coupon_code=coupon_code,
-        is_vip=is_vip,
-    )
+    assert isinstance(data, list)
+    # All returned users must have is_vip True
+    for user in data:
+        assert user.get("is_vip") is True
+    returned_ids = {u["id"] for u in data}
+    expected_ids = {1, 3}
+    assert expected_ids == returned_ids
 
 
-@patch("app.api.routes.cart_service")
-def test_calculate_cart_returns_400_on_value_error_from_service(mock_cart_service):
-    # Arrange
-    items = [{"product_id": 1, "quantity": 1, "price": 10.0}]
-    coupon_code = "INVALID"
-    is_vip = False
-    error_message = "Cupom inválido"
-
-    mock_cart_service.calculate_cart_total.side_effect = ValueError(error_message)
-
-    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
-
-    # Act
-    response = client.post("/cart/calculate", json=payload)
-
-    # Assert
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json() == {"detail": "Desconto inválido"}
-
-
-@pytest.mark.parametrize(
-    "payload,missing_field",
-    [
-        ({"discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": False}, "base_price"),
-        # discount_percentage e is_vip têm defaults, então não são obrigatórios
-    ],
-)
-def test_calculate_discount_missing_required_fields(payload, missing_field):
-    # coupon_code is optional, so skip that case
-    if missing_field == "coupon_code":
-        # Should succeed because coupon_code is optional
-        response = client.post("/discounts/calculate", json=payload)
-        assert response.status_code == status.HTTP_200_OK
-        return
-
-    response = client.post("/discounts/calculate", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert missing_field in response.text
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"base_price": "one hundred", "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": False},
-        {"base_price": 100.0, "discount_percentage": "ten", "coupon_code": "SAVE10", "is_vip": False},
-        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": "SAVE10", "is_vip": []},
-        {"base_price": 100.0, "discount_percentage": 10.0, "coupon_code": [], "is_vip": False},
-    ],
-)
-def test_calculate_discount_invalid_field_types(payload):
-    response = client.post("/discounts/calculate", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"base_price": 0, "discount_percentage": 0, "coupon_code": "", "is_vip": False},
-        {"base_price": -10, "discount_percentage": 0, "coupon_code": None, "is_vip": True},
-        {"base_price": 1000000, "discount_percentage": 100, "coupon_code": "VIP100", "is_vip": True},
-        {"base_price": 100, "discount_percentage": 101, "coupon_code": "INVALID", "is_vip": False},
-        {"base_price": 100, "discount_percentage": -1, "coupon_code": "INVALID", "is_vip": False},
-    ],
-)
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_with_edge_values(mock_discount_service, payload):
-    if payload["base_price"] < 0:
-        # Pydantic valida base_price >= 0 e retorna 422
-        response = client.post("/discounts/calculate", json=payload)
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    elif payload["discount_percentage"] > 100 or payload["discount_percentage"] < 0:
-        # Pydantic valida discount_percentage entre 0 e 100 e retorna 422
-        response = client.post("/discounts/calculate", json=payload)
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    else:
-        # Return a dummy final price for valid inputs
-        mock_discount_service.calculate_final_price.return_value = 50.0
-        response = client.post("/discounts/calculate", json=payload)
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert "final_price" in data
-        assert isinstance(data["final_price"], (int, float))
-
-
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_without_coupon_code(mock_discount_service):
-    mock_discount_service.calculate_final_price.return_value = 90.0
-    payload = {
-        "base_price": 100.0,
-        "discount_percentage": 10.0,
-        "is_vip": False,
-    }
-    mock_cart_service.calculate_cart_total.return_value = expected_result
-
-    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
-
-    # Act
-    response = client.post("/cart/calculate", json=payload)
-
-    # Assert
-    assert response.status_code == status.HTTP_200_OK
+def test_get_users_search_endpoint_with_vip_prefix_and_empty_term_returns_all_vip_users(mock_users):
+    response = client.get("/users/search", params={"q": "vip:"})
+    assert response.status_code == 200
     data = response.json()
-    assert data["discount"] == expected_result["discount"]
-    assert data["final_total"] == expected_result["final_total"]
-    mock_cart_service.calculate_cart_total.assert_called_once_with(
-        items=[{"product_id": 1, "quantity": 2, "price": 50.0}],
-        coupon_code=coupon_code,
-        is_vip=is_vip,
-    )
+    assert isinstance(data, list)
+    # All users must be VIP
+    for user in data:
+        assert user.get("is_vip") is True
+    expected_ids = {1, 3, 5}
+    returned_ids = {u["id"] for u in data}
+    assert expected_ids == returned_ids
 
 
-@patch("app.api.routes.cart_service")
-def test_calculate_cart_with_empty_items_returns_zero_total(mock_cart_service):
-    # Arrange
-    items = []
-    coupon_code = None
-    is_vip = False
-    expected_result = {
-        "total": 0.0,
-        "discount": 0.0,
-        "final_total": 0.0,
-        "items": items,
-    }
-    mock_cart_service.calculate_cart_total.return_value = expected_result
-
-    payload = make_cart_request_payload(items=items, coupon_code=coupon_code, is_vip=is_vip)
-
-    # Act
-    response = client.post("/cart/calculate", json=payload)
-
-    # Assert
-    assert response.status_code == status.HTTP_200_OK
+def test_get_users_search_endpoint_with_vip_prefix_and_nonexistent_term_returns_empty_list(mock_users):
+    response = client.get("/users/search", params={"q": "vip:xyz"})
+    assert response.status_code == 200
     data = response.json()
-    assert data["total"] == 0.0
-    assert data["final_total"] == 0.0
-    mock_cart_service.calculate_cart_total.assert_called_once()
+    assert data == []
 
 
-def test_calculate_cart_rejects_invalid_item_data():
-    # Negative quantity and price should be rejected by Pydantic validation
-    payload = {
-        "items": [
-            {"product_id": 1, "quantity": -1, "price": 10.0},
-            {"product_id": 2, "quantity": 1, "price": -5.0},
-        ],
-        "coupon_code": None,
-        "is_vip": False,
-    }
-    response = client.post("/cart/calculate", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-def test_calculate_cart_rejects_payload_missing_required_fields():
-    # Missing 'items' field should cause validation error 422
-    payload = {
-        "coupon_code": "ANY",
-        "is_vip": False,
-    }
-    response = client.post("/cart/calculate", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_service_returns_none(mock_discount_service):
-    mock_discount_service.calculate_final_price.return_value = None
-    payload = make_payload()
-    response = client.post("/discounts/calculate", json=payload)
-    # If service returns None, Pydantic validation for DiscountResponse fails.
-    # Since ValidationError is a ValueError, the controller catches it and returns 400.
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-
-@patch("app.api.routes.discount_service")
-def test_calculate_discount_service_raises_unexpected_exception_returns_500(mock_discount_service):
-    mock_discount_service.calculate_final_price.side_effect = RuntimeError("Erro inesperado")
-    payload = make_payload()
-    response = client.post("/discounts/calculate", json=payload)
-    # Since only ValueError is caught, other exceptions cause 500 Internal Server Error
-    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-
-
-def test_discount_endpoint_documentation_contains_discount_route():
-    response = client.get("/openapi.json")
-    assert response.status_code == status.HTTP_200_OK
+@pytest.mark.parametrize("query", ["VIP:ana", "ViP:ana"])
+def test_get_users_search_endpoint_vip_prefix_case_insensitive(query, mock_users):
+    response = client.get("/users/search", params={"q": query})
+    assert response.status_code == 200
     data = response.json()
-    assert "/discounts/calculate" in data["paths"]
+    expected_ids = {1, 3}
+    returned_ids = {u["id"] for u in data}
+    assert expected_ids == returned_ids
+    for user in data:
+        assert user.get("is_vip") is True
+
+
+def test_get_users_search_endpoint_with_vip_in_middle_of_term_searches_normally(mock_users):
+    response = client.get("/users/search", params={"q": "olivip:ia"})
+    assert response.status_code == 200
+    data = response.json()
+    # No user has this substring, so expect empty list
+    assert data == []
+
+
+def test_get_users_search_endpoint_handles_user_without_is_vip(monkeypatch):
+    users = [
+        UserResponse(id=1, name="Ana Silva", email="ana@example.com", status="ACTIVE", role="USER", is_vip=True),
+        UserWithoutIsVip(id=99, name="No VIP Field", email="novipfield@example.com"),
+    ]
+
+    def mock_list_users(limit=None, offset=None):
+        return users
+
+    monkeypatch.setattr(user_service, "list_users", mock_list_users)
+
+    response = client.get("/users/search", params={"q": "vip:ana"})
+    assert response.status_code == 200
+    data = response.json()
+    # Only user with is_vip True and name containing "ana" should be returned
+    assert len(data) == 1
+    assert data[0]["id"] == 1
+
+    response_no_prefix = client.get("/users/search", params={"q": "no vip"})
+    assert response_no_prefix.status_code == 200
+    data_no_prefix = response_no_prefix.json()
+    # User without is_vip should be included if name matches
+    assert any(u["id"] == 99 for u in data_no_prefix)
