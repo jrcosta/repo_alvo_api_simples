@@ -1,4 +1,4 @@
-from app.schemas import UserCreate, UserResponse
+from app.schemas import UserCreate, UserResponse, UserUpdate
 
 
 class UserService:
@@ -45,6 +45,23 @@ class UserService:
         self._users.append(user)
         self._next_id += 1
         return user
+
+    def update_user(self, user_id: int, payload: UserUpdate) -> UserResponse | None:
+        for i, user in enumerate(self._users):
+            if user.id == user_id:
+                updated_name = payload.name if payload.name is not None else user.name
+                updated_email = payload.email if payload.email is not None else user.email
+                updated_is_vip = payload.is_vip if payload.is_vip is not None else user.is_vip
+
+                updated_user = UserResponse(
+                    id=user.id,
+                    name=updated_name,
+                    email=updated_email,
+                    is_vip=updated_is_vip
+                )
+                self._users[i] = updated_user
+                return updated_user
+        return None
 
     def reset(self) -> None:
         """Reinitialise the service to its original seeded state. Intended for use in tests."""
