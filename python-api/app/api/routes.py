@@ -7,6 +7,7 @@ from app.services.cart_service import CartService
 from app.schemas import (
     HealthResponse,
     UserCreate,
+    UserUpdate,
     UserResponse,
     CountResponse,
     EmailResponse,
@@ -180,6 +181,32 @@ def get_user(user_id: int) -> UserResponse:
         )
 
     return user
+
+
+@router.put("/users/{user_id}", response_model=UserResponse, tags=["users"])
+def update_user(user_id: int, payload: UserUpdate) -> UserResponse:
+    """Update an existing user's information.
+    
+    Returns 404 if the user is not found.
+    Returns 409 if the new email already exists for another user.
+    """
+    if payload.email is not None:
+        existing_user = user_service.find_by_email(payload.email)
+        if existing_user and existing_user.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="E-mail já cadastrado por outro usuário",
+            )
+            
+    updated_user = user_service.update_user(user_id, payload)
+    
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+        
+    return updated_user
 
 
 @router.post("/discounts/calculate", response_model=DiscountResponse, tags=["discounts"])

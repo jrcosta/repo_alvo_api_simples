@@ -19,6 +19,19 @@ class UserCreate(BaseModel):
         return value
 
 
+class UserUpdate(BaseModel):
+    name: str | None = Field(None, min_length=3, max_length=100)
+    email: EmailStr | None = None
+    is_vip: StrictBool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def reject_blank_name(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("must not be blank")
+        return value
+
+
 class UserResponse(BaseModel):
     id: int
     name: str = Field(..., min_length=1)
