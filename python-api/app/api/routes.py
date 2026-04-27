@@ -185,11 +185,10 @@ def get_user(user_id: int) -> UserResponse:
 
 @router.put("/users/{user_id}", response_model=UserResponse, tags=["users"])
 def update_user(user_id: int, payload: UserUpdate) -> UserResponse:
-    """Update an existing user's information.
-    
-    Returns 404 if the user is not found.
-    Returns 409 if the new email already exists for another user.
-    """
+    """Update an existing user's information."""
+    if not payload.model_dump(exclude_unset=True):
+        raise HTTPException(status_code=422, detail="Informe ao menos um campo para atualizar")
+
     if payload.email is not None:
         existing_user = user_service.find_by_email(payload.email)
         if existing_user and existing_user.id != user_id:

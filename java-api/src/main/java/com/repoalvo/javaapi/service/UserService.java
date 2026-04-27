@@ -17,8 +17,14 @@ public class UserService {
     private final AtomicInteger nextId = new AtomicInteger(3);
 
     public UserService() {
+        reset();
+    }
+
+    public synchronized void reset() {
+        users.clear();
         users.add(new UserResponse(1, "Ana Silva", "ana@example.com", "ACTIVE", "ADMIN", "+55 11 90000-0001"));
         users.add(new UserResponse(2, "Bruno Lima", "bruno@example.com", "ACTIVE", "USER", "+55 11 90000-0002"));
+        nextId.set(3);
     }
 
     public synchronized List<UserResponse> listUsers(int limit, int offset) {

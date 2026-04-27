@@ -24,6 +24,14 @@ class UserControllerIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
+    private com.repoalvo.javaapi.service.UserService userService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setup() {
+        userService.reset();
+    }
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @Test

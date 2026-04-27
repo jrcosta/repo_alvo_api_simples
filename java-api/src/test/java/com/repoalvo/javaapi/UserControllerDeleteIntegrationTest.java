@@ -27,6 +27,9 @@ class UserControllerDeleteIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private com.repoalvo.javaapi.service.UserService userService;
+
     private final String validUsername = "admin";
     private final String validPassword = "adminpass";
 
@@ -34,11 +37,8 @@ class UserControllerDeleteIntegrationTest {
     private final String userWithoutDeletePermissionPassword = "userpass";
 
     @BeforeEach
-    void setUp() throws Exception {
-        // Ensure user with ID 1 exists and has related data for tests
-        // This setup assumes an endpoint or direct DB access to create/reset user data
-        // For demonstration, we assume user 1 exists and user 2 exists for concurrency tests
-        // If needed, implement setup here or use @Sql scripts for DB state reset
+    void setup() throws Exception {
+        userService.reset();
     }
 
     @Test
