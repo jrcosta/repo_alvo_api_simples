@@ -276,4 +276,5 @@ def test_update_user_with_status_and_role_valid_and_invalid():
 
     invalid_payload = {"status": "unknown", "role": "invalid"}
     response_invalid = client.put("/users/1", json=invalid_payload)
-    assert response_invalid.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response_invalid.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY#   t r i g g e r   q a g e n t  
+ 
