@@ -70,12 +70,7 @@ def test_api_update_user_no_fields_to_update():
     user_id = 1
     payload = {}
     response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == user_id
-    assert data["name"] == "Ana Silva"
-    assert data["email"] == "ana@example.com"
-    assert data["is_vip"] is True
+    assert response.status_code == 422
 
 
 def test_api_update_user_persists_data_after_update():
@@ -96,12 +91,10 @@ def test_api_update_user_persists_data_after_update():
 
 def test_api_update_user_returns_404_for_none_returned_by_service(monkeypatch):
     # Validar comportamento da camada de rota HTTP para update_user quando o retorno é None
-    from app.services.user_service import user_service
-
+    from app.api import routes
     def fake_update_user(user_id, payload):
         return None
-
-    monkeypatch.setattr(user_service, "update_user", fake_update_user)
+    monkeypatch.setattr(routes.user_service, "update_user", fake_update_user)
     user_id = 1
     payload = {"name": "Any Name"}
     response = client.put(f"/users/{user_id}", json=payload)

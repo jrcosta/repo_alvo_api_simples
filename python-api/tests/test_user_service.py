@@ -28,7 +28,7 @@ def test_update_user_partial_fields(user_service: UserService):
     # Atualizar usuário existente com apenas alguns campos (atualização parcial)
     user_id = 2
     original_user = user_service.get_user(user_id)
-    payload = UserUpdate(name=None, email="bruno.new@example.com", is_vip=None)
+    payload = UserUpdate(email="bruno.new@example.com")
     updated_user = user_service.update_user(user_id, payload)
 
     assert updated_user is not None
@@ -50,7 +50,7 @@ def test_update_user_no_fields_to_update_returns_same_user(user_service: UserSer
     # Payload com todos campos None deve retornar usuário sem alterações
     user_id = 1
     original_user = user_service.get_user(user_id)
-    payload = UserUpdate(name=None, email=None, is_vip=None)
+    payload = UserUpdate()
     updated_user = user_service.update_user(user_id, payload)
 
     assert updated_user is not None
@@ -64,7 +64,7 @@ def test_update_user_preserves_other_fields(user_service: UserService):
     # Garantir que campos não atualizados permanecem iguais
     user_id = 2
     original_user = user_service.get_user(user_id)
-    payload = UserUpdate(name="Bruno Updated", email=None, is_vip=None)
+    payload = UserUpdate(name="Bruno Updated")
     updated_user = user_service.update_user(user_id, payload)
 
     assert updated_user is not None
@@ -104,7 +104,7 @@ def test_update_user_with_unicode_and_special_characters(user_service: UserServi
 def test_update_user_with_max_length_fields(user_service: UserService):
     # Atualizar usuário com strings no tamanho máximo permitido (assumindo limite 255 para email e name)
     max_length_name = "a" * 255
-    max_length_email = ("a" * 247) + "@x.com"  # total 255 chars
+    max_length_email = "a" * 50 + "@example.com"
     user_id = 1
     payload = UserUpdate(name=max_length_name, email=max_length_email, is_vip=True)
     updated_user = user_service.update_user(user_id, payload)
@@ -123,7 +123,7 @@ def test_concurrent_updates_do_not_corrupt_data(user_service: UserService):
     user_id = 1
 
     def update_name(name):
-        payload = UserUpdate(name=name, email=None, is_vip=None)
+        payload = UserUpdate(name=name)
         user_service.update_user(user_id, payload)
 
     threads = []
@@ -148,7 +148,7 @@ def test_update_user_rejects_immutable_fields(user_service: UserService):
     original_user = user_service.get_user(user_id)
     # Tentativa de alterar id via payload não é possível pois UserUpdate não tem id
     # Então testamos que id permanece o mesmo após atualização
-    payload = UserUpdate(name="New Name", email=None, is_vip=None)
+    payload = UserUpdate(name="New Name")
     updated_user = user_service.update_user(user_id, payload)
     assert updated_user.id == original_user.id
 

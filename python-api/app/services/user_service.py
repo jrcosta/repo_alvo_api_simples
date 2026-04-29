@@ -4,8 +4,8 @@ from app.schemas import UserCreate, UserResponse, UserUpdate
 class UserService:
     def __init__(self) -> None:
         self._users: list[UserResponse] = [
-            UserResponse(id=1, name="Ana Silva", email="ana@example.com", is_vip=True),
-            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com", is_vip=False),
+            UserResponse(id=1, name="Ana Silva", email="ana@example.com", is_vip=True, status="active", role="admin", phone_number="+55 11 90000-0001"),
+            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com", is_vip=False, status="active", role="user", phone_number="+55 11 90000-0002"),
         ]
         self._next_id = 3
 
@@ -41,6 +41,9 @@ class UserService:
             name=payload.name,
             email=payload.email,
             is_vip=payload.is_vip,
+            status=payload.status,
+            role=payload.role,
+            phone_number=payload.phone_number,
         )
         self._users.append(user)
         self._next_id += 1
@@ -52,12 +55,18 @@ class UserService:
                 updated_name = payload.name if payload.name is not None else user.name
                 updated_email = payload.email if payload.email is not None else user.email
                 updated_is_vip = payload.is_vip if payload.is_vip is not None else user.is_vip
+                updated_status = payload.status if payload.status is not None else user.status
+                updated_role = payload.role if payload.role is not None else user.role
+                updated_phone = payload.phone_number if payload.phone_number is not None else user.phone_number
 
                 updated_user = UserResponse(
                     id=user.id,
                     name=updated_name,
                     email=updated_email,
-                    is_vip=updated_is_vip
+                    is_vip=updated_is_vip,
+                    status=updated_status,
+                    role=updated_role,
+                    phone_number=updated_phone
                 )
                 self._users[i] = updated_user
                 return updated_user
@@ -66,7 +75,10 @@ class UserService:
     def reset(self) -> None:
         """Reinitialise the service to its original seeded state. Intended for use in tests."""
         self._users = [
-            UserResponse(id=1, name="Ana Silva", email="ana@example.com", is_vip=True),
-            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com", is_vip=False),
+            UserResponse(id=1, name="Ana Silva", email="ana@example.com", is_vip=True, status="active", role="admin", phone_number="+55 11 90000-0001"),
+            UserResponse(id=2, name="Bruno Lima", email="bruno@example.com", is_vip=False, status="active", role="user", phone_number="+55 11 90000-0002"),
         ]
         self._next_id = 3
+
+
+user_service = UserService()

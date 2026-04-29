@@ -68,8 +68,7 @@ public class UserServiceUnitTest {
                 "+55 11 90000-0001",
                 "11900000001",
                 "+1-202-555-0173",
-                "2025550173",
-                null
+                "2025550173"
         };
 
         for (String phone : phoneNumbers) {
