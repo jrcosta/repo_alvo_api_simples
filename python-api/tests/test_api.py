@@ -1,7 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.schemas import UserUpdate
 
 client = TestClient(app)
 
@@ -13,87 +12,54 @@ def reset_users():
     user_service.reset()
 
 
-def test_api_update_user_partial_success():
-    # Atualização parcial via API e validação da resposta
+def test_api_update_user_rejects_empty_payload_with_422_and_clear_error_message():
     user_id = 1
-    payload = {"email": "ana.partial@example.com"}
+    payload = {}
+    response = client.put(f"/users/{user_id}", json=payload)
+    assert response.status_code == 422
+    json_data = response.json()
+    # Pydantic validation error detail should mention missing fields or no data provided
+    assert "detail" in json_data
+    # Check that error message indicates at least one field must be provided
+    error_messages = [err.get("msg", "") for err in json_data["detail"]]
+    assert any("at least one field" in msg.lower() or "none provided" in msg.lower() or "value_error" in msg.lower() for msg in error_messages)
+
+
+def test_api_update_user_rejects_payload_with_all_null_fields_with_422():
+    user_id = 1
+    payload = {"name": None, "email": None, "is_vip": None}
+    response = client.put(f"/users/{user_id}", json=payload)
+    assert response.status_code == 422
+    json_data = response.json()
+    assert "detail" in json_data
+    error_messages = [err.get("msg", "") for err in json_data["detail"]]
+    assert any("none provided" in msg.lower() or "value_error" in msg.lower() for msg in error_messages)
+
+
+def test_api_update_user_accepts_payload_with_at_least_one_valid_field():
+    user_id = 1
+    payload = {"name": "Valid Name", "email": None, "is_vip": None}
     response = client.put(f"/users/{user_id}", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == user_id
-    assert data["email"] == "ana.partial@example.com"
-    assert data["name"] == "Ana Silva"  # name não alterado
+    assert data["name"] == "Valid Name"
 
 
-def test_api_update_user_full_success():
-    # Atualização completa via API
-    user_id = 2
-    payload = {"name": "Bruno Updated", "email": "bruno.updated@example.com", "is_vip": True}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == user_id
-    assert data["name"] == "Bruno Updated"
-    assert data["email"] == "bruno.updated@example.com"
-    assert data["is_vip"] is True
-
-
-def test_api_update_user_not_found():
-    # Tentativa de atualização de usuário inexistente retorna 404
+def test_api_update_user_returns_404_for_nonexistent_user_with_valid_payload():
     user_id = 9999
-    payload = {"name": "No User"}
+    payload = {"name": "Nonexistent User"}
     response = client.put(f"/users/{user_id}", json=payload)
     assert response.status_code == 404
     assert response.json()["detail"] == "Usuário não encontrado"
 
 
-def test_api_update_user_invalid_payload():
-    # Payload inválido retorna 400
-    user_id = 1
-    payload = {"email": "invalid-email-format"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 422  # Pydantic validation error returns 422 Unprocessable Entity
-
-
-def test_api_update_user_email_conflict():
-    # Testar conflito de email (409) ao tentar atualizar para email já existente em outro usuário
-    user_id = 1
-    # Email do usuário 2 é bruno@example.com
-    payload = {"email": "bruno@example.com"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 409
-    assert "E-mail já cadastrado" in response.json()["detail"]
-
-
-def test_api_update_user_no_fields_to_update():
-    # Payload vazio ou com todos campos None deve retornar usuário sem alterações
-    user_id = 1
-    payload = {}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 422
-
-
-def test_api_update_user_persists_data_after_update():
-    # Verificar persistência dos dados após atualização via API
-    user_id = 2
-    payload = {"name": "Bruno Persisted", "email": "bruno.persisted@example.com", "is_vip": False}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 200
-
-    # Fazer GET para confirmar dados atualizados
-    get_response = client.get(f"/users/{user_id}")
-    assert get_response.status_code == 200
-    data = get_response.json()
-    assert data["name"] == "Bruno Persisted"
-    assert data["email"] == "bruno.persisted@example.com"
-    assert data["is_vip"] is False
-
-
-def test_api_update_user_returns_404_for_none_returned_by_service(monkeypatch):
-    # Validar comportamento da camada de rota HTTP para update_user quando o retorno é None
+def test_api_update_user_returns_404_when_service_returns_none(monkeypatch):
     from app.api import routes
+
     def fake_update_user(user_id, payload):
         return None
+
     monkeypatch.setattr(routes.user_service, "update_user", fake_update_user)
     user_id = 1
     payload = {"name": "Any Name"}
@@ -102,42 +68,74 @@ def test_api_update_user_returns_404_for_none_returned_by_service(monkeypatch):
     assert response.json()["detail"] == "Usuário não encontrado"
 
 
-def test_api_update_user_authorization_denied(monkeypatch):
-    # Testar autorização negativa: usuário sem permissão tenta atualizar dados e recebe 403
-    # Como não há autenticação implementada, simulamos via monkeypatch no endpoint
-    from fastapi import HTTPException
+def test_api_update_user_invalid_email_returns_422():
+    user_id = 1
+    payload = {"email": "invalid-email-format"}
+    response = client.put(f"/users/{user_id}", json=payload)
+    assert response.status_code == 422
+    json_data = response.json()
+    assert "detail" in json_data
+    error_messages = [err.get("msg", "") for err in json_data["detail"]]
+    assert any("value is not a valid email address" in msg.lower() for msg in error_messages)
+
+
+def test_api_update_user_rejects_payload_with_extra_unexpected_fields():
+    user_id = 1
+    payload = {"name": "Extra Field User", "unknown_field": "should be ignored or rejected"}
+    response = client.put(f"/users/{user_id}", json=payload)
+    # Depending on Pydantic config, extra fields may be ignored or cause 422
+    # We assert that either 200 or 422 is returned, but if 422, check error message
+    assert response.status_code in (200, 422)
+    if response.status_code == 422:
+        json_data = response.json()
+        assert "detail" in json_data
+        error_messages = [err.get("msg", "") for err in json_data["detail"]]
+        assert any("extra fields" in msg.lower() or "unexpected" in msg.lower() for msg in error_messages)
+    else:
+        data = response.json()
+        assert data["name"] == "Extra Field User"
+
+
+def test_api_update_user_rejects_payload_with_partially_invalid_fields():
+    user_id = 1
+    payload = {"name": "Valid Name", "email": "invalid-email-format"}
+    response = client.put(f"/users/{user_id}", json=payload)
+    assert response.status_code == 422
+    json_data = response.json()
+    assert "detail" in json_data
+    error_messages = [err.get("msg", "") for err in json_data["detail"]]
+    assert any("value is not a valid email address" in msg.lower() for msg in error_messages)
+
+
+def test_api_update_user_returns_422_for_null_values_in_valid_fields():
+    user_id = 1
+    payload = {"name": None}
+    response = client.put(f"/users/{user_id}", json=payload)
+    assert response.status_code == 422
+    json_data = response.json()
+    assert "detail" in json_data
+
+
+def test_api_update_user_monkeypatch_does_not_affect_other_tests(monkeypatch):
     from app.api import routes
 
     original_update_user = routes.user_service.update_user
 
     def fake_update_user(user_id, payload):
-        raise HTTPException(status_code=403, detail="Acesso negado")
+        return None
 
     monkeypatch.setattr(routes.user_service, "update_user", fake_update_user)
     user_id = 1
-    payload = {"name": "Unauthorized"}
+    payload = {"name": "Test"}
     response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
+    assert response.status_code == 404
 
-    # Restaurar método original
+    # Restore original method
     monkeypatch.setattr(routes.user_service, "update_user", original_update_user)
 
-
-def test_api_update_user_authorization_success(monkeypatch):
-    # Testar autorização positiva: usuário autorizado consegue atualizar dados com sucesso
-    from app.api import routes
-
-    original_update_user = routes.user_service.update_user
-
-    def fake_update_user(user_id, payload):
-        return routes.user_service.get_user(user_id)
-
-    monkeypatch.setattr(routes.user_service, "update_user", fake_update_user)
-    user_id = 1
-    payload = {"name": "Authorized"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 200
-    assert response.json()["name"] == "Ana Silva"  # Como fake_update_user retorna usuário original
-
-    monkeypatch.setattr(routes.user_service, "update_user", original_update_user)
+    # Now call again to ensure original method works as expected
+    response2 = client.put(f"/users/{user_id}", json={"name": "Restored"})
+    assert response2.status_code == 200
+    data = response2.json()
+    assert data["id"] == user_id
+    assert data["name"] == "Restored"

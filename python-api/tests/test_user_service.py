@@ -75,16 +75,13 @@ def test_update_user_preserves_other_fields(user_service: UserService):
 
 def test_update_user_invalid_email_raises_validation_error(user_service: UserService):
     # Atualizar usuário com email mal formatado deve levantar ValidationError do Pydantic
-    user_id = 1
     with pytest.raises(ValidationError):
         UserUpdate(name="Ana", email="invalid-email", is_vip=True)
 
 
 def test_update_user_with_extra_fields_ignored(user_service: UserService):
     # Atualizar usuário com payload contendo campos extras não esperados
-    # Como UserUpdate é Pydantic, campos extras são ignorados ou causam erro dependendo da configuração
-    # Aqui assumimos que campos extras são rejeitados (default Pydantic behavior)
-    user_id = 1
+    # Como UserUpdate é Pydantic, campos extras são rejeitados (default Pydantic behavior)
     with pytest.raises(ValidationError):
         UserUpdate(name="Ana", email="ana@example.com", is_vip=True, extra_field="not_allowed")
 
@@ -102,9 +99,9 @@ def test_update_user_with_unicode_and_special_characters(user_service: UserServi
 
 
 def test_update_user_with_max_length_fields(user_service: UserService):
-    # Atualizar usuário com strings no tamanho máximo permitido (assumindo limite 255 para email e name)
+    # Atualizar usuário com strings no tamanho máximo permitido (limite real 255 para email e name)
     max_length_name = "a" * 255
-    max_length_email = "a" * 50 + "@example.com"
+    max_length_email = ("a" * (255 - len("@example.com"))) + "@example.com"
     user_id = 1
     payload = UserUpdate(name=max_length_name, email=max_length_email, is_vip=True)
     updated_user = user_service.update_user(user_id, payload)
@@ -162,5 +159,129 @@ def test_update_user_partial_failure_rollback(user_service: UserService):
     with pytest.raises(ValidationError):
         UserUpdate(name="Valid Name", email="invalid-email", is_vip=True)
     # Usuário permanece inalterado
+    user_after = user_service.get_user(user_id)
+    assert user_after == original_user
+
+
+# Novos testes para lacunas identificadas no relatório de QA
+
+
+def test_update_user_with_fields_explicitly_set_to_none(user_service: UserService):
+    # Atualizar usuário enviando explicitamente campos com valor None
+    # Verificar se o sistema ignora esses campos e mantém os valores originais
+    user_id = 1
+    original_user = user_service.get_user(user_id)
+    # Construir payload com campos None explicitamente
+    payload = UserUpdate(name=None, email=None, is_vip=None)
+    updated_user = user_service.update_user(user_id, payload)
+
+    assert updated_user is not None
+    assert updated_user.id == original_user.id
+    # Campos devem permanecer inalterados pois None deve ser ignorado
+    assert updated_user.name == original_user.name
+    assert updated_user.email == original_user.email
+    assert updated_user.is_vip == original_user.is_vip
+
+
+def test_update_user_omitting_fields_preserves_original_values(user_service: UserService):
+    # Atualizar usuário omitindo campos no payload e confirmar que valores originais permanecem
+    user_id = 2
+    original_user = user_service.get_user(user_id)
+    # Payload vazio (todos campos omitidos)
+    payload = UserUpdate()
+    updated_user = user_service.update_user(user_id, payload)
+
+    assert updated_user is not None
+    assert updated_user.id == original_user.id
+    assert updated_user.name == original_user.name
+    assert updated_user.email == original_user.email
+    assert updated_user.is_vip == original_user.is_vip
+
+
+@pytest.mark.parametrize(
+    "email_value,should_raise",
+    [
+        ("a" * 254 + "@example.com", False),  # 254 chars local part + domain, valid
+        ("a" * 243 + "@example.com", False),  # 243 chars local part + domain, valid
+        ("a" * 245 + "@example.com", True),   # 245 chars local part + domain, invalid (over 255)
+    ],
+)
+def test_update_user_email_length_limits(user_service: UserService, email_value, should_raise):
+    user_id = 1
+    if should_raise:
+        with pytest.raises(ValidationError):
+            UserUpdate(email=email_value)
+    else:
+        payload = UserUpdate(email=email_value)
+        updated_user = user_service.update_user(user_id, payload)
+        assert updated_user.email == email_value
+
+
+def test_update_user_rejects_extra_undeclared_fields(user_service: UserService):
+    # Testar rejeição de campos extras no payload, incluindo None e inválidos
+    with pytest.raises(ValidationError):
+        UserUpdate(name="Name", email="email@example.com", is_vip=True, unknown_field="value")
+
+    with pytest.raises(ValidationError):
+        UserUpdate(name="Name", email="email@example.com", is_vip=True, extra_none=None)
+
+    with pytest.raises(ValidationError):
+        UserUpdate(name="Name", email="email@example.com", is_vip=True, extra_invalid=123)
+
+
+def test_update_user_partial_does_not_alter_unset_fields(user_service: UserService):
+    # Atualização parcial não deve alterar campos não enviados
+    user_id = 1
+    original_user = user_service.get_user(user_id)
+    payload = UserUpdate(name="Partial Update")
+    updated_user = user_service.update_user(user_id, payload)
+
+    assert updated_user.name == "Partial Update"
+    assert updated_user.email == original_user.email
+    assert updated_user.is_vip == original_user.is_vip
+
+
+def test_update_user_with_invalid_field_types_raises_validation_error():
+    # Testar atualização com tipos inválidos para os campos
+    with pytest.raises(ValidationError):
+        UserUpdate(name=123, email="valid@example.com", is_vip=True)
+
+    with pytest.raises(ValidationError):
+        UserUpdate(name="Valid Name", email=456, is_vip=True)
+
+    with pytest.raises(ValidationError):
+        UserUpdate(name="Valid Name", email="valid@example.com", is_vip="not_bool")
+
+
+def test_update_user_with_empty_strings_and_omitted_optional_fields(user_service: UserService):
+    # Testar atualização parcial com campos opcionais omitidos e explicitamente vazios
+    user_id = 1
+    original_user = user_service.get_user(user_id)
+    payload = UserUpdate(name="", email=None)  # email None deve ser ignorado
+    updated_user = user_service.update_user(user_id, payload)
+
+    assert updated_user.name == ""  # aceita string vazia
+    assert updated_user.email == original_user.email  # email None ignorado
+    assert updated_user.is_vip == original_user.is_vip
+
+
+def test_update_user_with_special_characters_and_whitespace(user_service: UserService):
+    # Testar campos de texto com caracteres especiais, espaços e unicode
+    user_id = 2
+    special_name = " José  Ñandú\t\n"
+    special_email = "josé.nandú@example.com"
+    payload = UserUpdate(name=special_name, email=special_email)
+    updated_user = user_service.update_user(user_id, payload)
+
+    assert updated_user.name == special_name
+    assert updated_user.email == special_email
+
+
+def test_update_user_multiple_invalid_fields_raises_and_no_state_change(user_service: UserService):
+    # Testar rollback e consistência após falha de validação múltipla
+    user_id = 1
+    original_user = user_service.get_user(user_id)
+    with pytest.raises(ValidationError):
+        UserUpdate(name=123, email="invalid-email", is_vip="not_bool")
     user_after = user_service.get_user(user_id)
     assert user_after == original_user
