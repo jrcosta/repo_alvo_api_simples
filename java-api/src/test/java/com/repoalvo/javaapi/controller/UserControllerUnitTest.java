@@ -48,7 +48,7 @@ class UserControllerUnitTest {
         when(userService.getById(userId)).thenReturn(java.util.Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(userId));
-        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
         assertEquals("Usuário não encontrado", ex.getReason());
 
         verify(userService, times(1)).getById(userId);
@@ -90,7 +90,7 @@ class UserControllerUnitTest {
         when(userService.getById(userId)).thenReturn(java.util.Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(userId));
-        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
         assertEquals("Usuário não encontrado", ex.getReason());
 
         verify(userService, times(1)).getById(userId);
@@ -105,7 +105,7 @@ class UserControllerUnitTest {
         when(userService.getById(userId)).thenReturn(java.util.Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(userId));
-        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
         assertEquals("Usuário não encontrado", ex.getReason());
 
         verify(userService, times(1)).getById(userId);
