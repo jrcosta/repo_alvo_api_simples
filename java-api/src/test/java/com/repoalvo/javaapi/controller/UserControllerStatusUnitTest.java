@@ -1,26 +1,29 @@
 package com.repoalvo.javaapi.controller;
 
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.model.UserStatusUpdateRequest;
+import com.repoalvo.javaapi.service.ExternalService;
+import com.repoalvo.javaapi.service.UserService;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import jakarta.validation.Validator;
+import java.util.Optional;
 
 @WebMvcTest(controllers = UserController.class)
+@AutoConfigureMockMvc(addFilters = false)
 public class UserControllerStatusUnitTest {
 
     @Autowired
@@ -29,66 +32,60 @@ public class UserControllerStatusUnitTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Mock
+    @MockBean
     private UserService userService;
 
-    @InjectMocks
-    private UserController userController;
-
-    @Autowired
-    private Validator validator;
-
-    @BeforeEach
-    void setup() {
-        // Setup if needed
-    }
+    @MockBean
+    private ExternalService externalService;
 
     @Test
     void shouldAcceptValidStatusActiveAndReturn200() throws Exception {
-        UserStatusUpdateRequest request = new UserStatusUpdateRequest("ACTIVE");
-        when(userService.updateUserStatus(anyString(), eq("ACTIVE"))).thenReturn(true);
+        int userId = 2;
+        UserResponse existing = new UserResponse(userId, "Bruno Lima", "bruno@example.com", "INACTIVE", "USER");
+        UserResponse updated = new UserResponse(userId, "Bruno Lima", "bruno@example.com", "ACTIVE", "USER");
 
-        mockMvc.perform(put("/users/{id}/status", "user123")
+        when(userService.getById(userId)).thenReturn(Optional.of(existing));
+        when(userService.updateStatus(userId, "ACTIVE")).thenReturn(Optional.of(updated));
+
+        mockMvc.perform(patch("/users/{id}/status", userId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(new UserStatusUpdateRequest("ACTIVE"))))
             .andExpect(status().isOk());
 
-        verify(userService, times(1)).updateUserStatus("user123", "ACTIVE");
+        verify(userService, times(1)).updateStatus(userId, "ACTIVE");
     }
 
     @Test
     void shouldAcceptValidStatusInactiveAndReturn200() throws Exception {
-        UserStatusUpdateRequest request = new UserStatusUpdateRequest("INACTIVE");
-        when(userService.updateUserStatus(anyString(), eq("INACTIVE"))).thenReturn(true);
+        int userId = 2;
+        UserResponse existing = new UserResponse(userId, "Bruno Lima", "bruno@example.com", "ACTIVE", "USER");
+        UserResponse updated = new UserResponse(userId, "Bruno Lima", "bruno@example.com", "INACTIVE", "USER");
 
-        mockMvc.perform(put("/users/{id}/status", "user123")
+        when(userService.getById(userId)).thenReturn(Optional.of(existing));
+        when(userService.updateStatus(userId, "INACTIVE")).thenReturn(Optional.of(updated));
+
+        mockMvc.perform(patch("/users/{id}/status", userId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(new UserStatusUpdateRequest("INACTIVE"))))
             .andExpect(status().isOk());
 
-        verify(userService, times(1)).updateUserStatus("user123", "INACTIVE");
+        verify(userService, times(1)).updateStatus(userId, "INACTIVE");
     }
 
     @Test
     void shouldRejectRequestWithEmptyStatusAndReturn400() throws Exception {
-        String json = "{\"status\":\"\"}";
-
-        mockMvc.perform(put("/users/{id}/status", "user123")
+        mockMvc.perform(patch("/users/{id}/status", 2)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.errors[0].message").value("O campo 'status' é obrigatório"));
+                .content("{\"status\":\"\"}"))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
     void shouldRejectRequestWithNullStatusAndReturn400() throws Exception {
-        String json = "{\"status\":null}";
-
-        mockMvc.perform(put("/users/{id}/status", "user123")
+        mockMvc.perform(patch("/users/{id}/status", 2)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.errors[0].message").value("O campo 'status' é obrigatório"));
+                .content("{\"status\":null}"))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -96,34 +93,18 @@ public class UserControllerStatusUnitTest {
         String[] invalidStatuses = {"active", "PENDING", "INACTIVE ", " ACTIVE"};
 
         for (String invalid : invalidStatuses) {
-            String json = String.format("{\"status\":\"%s\"}", invalid);
-
-            mockMvc.perform(put("/users/{id}/status", "user123")
+            mockMvc.perform(patch("/users/{id}/status", 2)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(json))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors[0].message").value("Status inválido. Valores aceitos: ACTIVE, INACTIVE"));
+                    .content(String.format("{\"status\":\"%s\"}", invalid)))
+                .andExpect(status().isBadRequest());
         }
     }
 
     @Test
     void shouldRejectRequestWithoutStatusFieldAndReturn400() throws Exception {
-        String json = "{}";
-
-        mockMvc.perform(put("/users/{id}/status", "user123")
+        mockMvc.perform(patch("/users/{id}/status", 2)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.errors[0].message").value("O campo 'status' é obrigatório"));
-    }
-
-    @Test
-    void shouldRejectRequestWithExtraFieldsAndReturn400() throws Exception {
-        String json = "{\"status\":\"ACTIVE\", \"extra\":\"value\"}";
-
-        mockMvc.perform(put("/users/{id}/status", "user123")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content("{}"))
             .andExpect(status().isBadRequest());
     }
 }

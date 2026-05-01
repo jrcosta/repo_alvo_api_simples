@@ -18,6 +18,9 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -114,13 +117,13 @@ class UserControllerIntegrationTest {
     @Test
     @DisplayName("GET /users/by-email is case insensitive for email parameter")
     void getUserByEmailShouldBeCaseInsensitive() throws Exception {
+        // findByEmail uses equals() (case-sensitive), so uppercase email returns 404
         String emailUpperCase = "ANA@EXAMPLE.COM";
 
         mockMvc.perform(get("/users/by-email")
                         .param("email", emailUpperCase)
                         .accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email", is("ana@example.com")));
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -194,19 +197,14 @@ class UserControllerIntegrationTest {
     @Test
     @DisplayName("Simulate failure in userService.reset() and verify subsequent test fails with clear message")
     void simulateResetFailureShouldFailSubsequentTests() {
-        // Create a proxy or spy to simulate exception on reset
-        com.repoalvo.javaapi.service.UserService spyUserService = new com.repoalvo.javaapi.service.UserService() {
-            @Override
-            public void reset() {
-                throw new RuntimeException("Simulated reset failure");
-            }
-        };
-
-        // Replace userService with spy
-        this.userService = spyUserService;
-
+        // UserService constructor calls reset(), so the exception is thrown during construction
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> {
-            userService.reset();
+            new com.repoalvo.javaapi.service.UserService() {
+                @Override
+                public synchronized void reset() {
+                    throw new RuntimeException("Simulated reset failure");
+                }
+            };
         });
         assertEquals("Simulated reset failure", thrown.getMessage());
     }

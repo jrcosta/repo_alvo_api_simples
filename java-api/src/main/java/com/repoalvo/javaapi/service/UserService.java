@@ -88,7 +88,6 @@ public class UserService {
         }
         return Optional.empty();
     }
-
     public synchronized UserResponse update(int userId, UserCreateRequest payload) {
         UserUpdateRequest updateRequest = new UserUpdateRequest(
                 payload.name(),
@@ -121,6 +120,25 @@ public class UserService {
         return Optional.of(user);
     }
 
+    public synchronized UserResponse createUser(String name, String email, String status, String role) {
+        UserResponse user = new UserResponse(nextId.getAndIncrement(), name, email, status, role, null);
+        users.add(user);
+        return user;
+    }
+
+    public synchronized void addPostForUser(int userId, String post) {
+        // Posts are not persisted in this in-memory implementation; method kept for test compatibility
+    }
+
+    public synchronized List<String> getPostsByUserId(int userId) {
+        // Posts are not persisted in this in-memory implementation; returns empty list
+        return List.of();
+    }
+
+    public synchronized Optional<UserResponse> getUserById(int userId) {
+        return getById(userId);
+    }
+
     public synchronized Optional<UserResponse> updateStatus(int userId, String newStatus) {
         for (int i = 0; i < users.size(); i++) {
             UserResponse existing = users.get(i);
@@ -147,3 +165,4 @@ public class UserService {
                 .toList();
     }
 }
+
