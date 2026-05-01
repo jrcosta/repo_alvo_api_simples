@@ -156,16 +156,25 @@ router.get('/', (req, res) => {
 
 router.put('/:user_id', (req, res) => {
   const userId = parseInt(req.params.user_id, 10);
-  const { name, email } = req.body;
+  if (isNaN(userId)) {
+    return res.status(422).json({ detail: 'ID de usuário inválido' });
+  }
+
+  const body = req.body;
+  if (!body || typeof body !== 'object') {
+    return res.status(422).json({ detail: "Pelo menos um dos campos 'name' ou 'email' deve ser informado" });
+  }
+
+  const { name, email } = body;
 
   if (!name && !email) {
-    return res.status(422).json({ detail: 'Informe ao menos um campo para atualizar' });
+    return res.status(422).json({ detail: "Pelo menos um dos campos 'name' ou 'email' deve ser informado" });
   }
 
   if (email) {
     const existing = userService.findByEmail(email);
     if (existing && existing.id !== userId) {
-      return res.status(409).json({ detail: 'E-mail já cadastrado por outro usuário' });
+      return res.status(409).json({ detail: 'E-mail já cadastrado' });
     }
   }
 
@@ -178,6 +187,9 @@ router.put('/:user_id', (req, res) => {
 
 router.delete('/:user_id', (req, res) => {
   const userId = parseInt(req.params.user_id, 10);
+  if (isNaN(userId)) {
+    return res.status(422).json({ detail: 'ID de usuário inválido' });
+  }
   const user = userService.getUser(userId);
   if (!user) {
     return res.status(404).json({ detail: 'Usuário não encontrado' });

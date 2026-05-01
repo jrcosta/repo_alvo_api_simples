@@ -211,6 +211,11 @@ def update_user(user_id: int, payload: UserUpdate) -> UserResponse:
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["users"])
 def delete_user(user_id: int) -> None:
     """Remove um usuário pelo ID."""
+    if user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="ID de usuário inválido",
+        )
     user = user_service.get_user(user_id)
     if not user:
         raise HTTPException(

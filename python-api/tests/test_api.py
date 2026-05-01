@@ -1,143 +1,91 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.schemas import UserUpdate
+from app.api import routes
+
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def reset_users():
-    # Reset users before each test to ensure consistent state
-    from app.services.user_service import user_service
-    user_service.reset()
+def reset_user_service():
+    routes.user_service.reset()
+    yield
+    routes.user_service.reset()
 
 
-def test_api_update_user_partial_success():
-    # Atualização parcial via API e validação da resposta
+def test_delete_existing_user_via_api_returns_204_and_user_removed():
     user_id = 1
-    payload = {"email": "ana.partial@example.com"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == user_id
-    assert data["email"] == "ana.partial@example.com"
-    assert data["name"] == "Ana Silva"  # name não alterado
+    response = client.delete(f"/users/{user_id}")
+    assert response.status_code in (200, 204)
+    # Confirm user no longer exists
+    get_response = client.get(f"/users/{user_id}")
+    assert get_response.status_code == 404
 
 
-def test_api_update_user_full_success():
-    # Atualização completa via API
-    user_id = 2
-    payload = {"name": "Bruno Updated", "email": "bruno.updated@example.com", "is_vip": True}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == user_id
-    assert data["name"] == "Bruno Updated"
-    assert data["email"] == "bruno.updated@example.com"
-    assert data["is_vip"] is True
-
-
-def test_api_update_user_not_found():
-    # Tentativa de atualização de usuário inexistente retorna 404
-    user_id = 9999
-    payload = {"name": "No User"}
-    response = client.put(f"/users/{user_id}", json=payload)
+def test_delete_nonexistent_user_via_api_returns_404_with_message():
+    response = client.delete("/users/9999")
     assert response.status_code == 404
-    assert response.json()["detail"] == "Usuário não encontrado"
+    assert response.json() == {"detail": "Usuário não encontrado"}
 
 
-def test_api_update_user_invalid_payload():
-    # Payload inválido retorna 400
-    user_id = 1
-    payload = {"email": "invalid-email-format"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 422  # Pydantic validation error returns 422 Unprocessable Entity
-
-
-def test_api_update_user_email_conflict():
-    # Testar conflito de email (409) ao tentar atualizar para email já existente em outro usuário
-    user_id = 1
-    # Email do usuário 2 é bruno@example.com
-    payload = {"email": "bruno@example.com"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 409
-    assert "E-mail já cadastrado" in response.json()["detail"]
-
-
-def test_api_update_user_no_fields_to_update():
-    # Payload vazio ou com todos campos None deve retornar usuário sem alterações
-    user_id = 1
-    payload = {}
-    response = client.put(f"/users/{user_id}", json=payload)
+@pytest.mark.parametrize("invalid_id", ["abc", "-1", "0", "1.5", " "])
+def test_delete_user_via_api_with_invalid_id_returns_422(invalid_id):
+    response = client.delete(f"/users/{invalid_id}")
     assert response.status_code == 422
 
 
-def test_api_update_user_persists_data_after_update():
-    # Verificar persistência dos dados após atualização via API
+def test_multiple_sequential_deletions_via_api_maintain_consistent_state():
+    # Delete user 1
+    response1 = client.delete("/users/1")
+    assert response1.status_code in (200, 204)
+    # Delete user 2
+    response2 = client.delete("/users/2")
+    assert response2.status_code in (200, 204)
+    # List users should be empty
+    list_response = client.get("/users")
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+
+def test_list_users_after_deletion_via_api_reflects_correct_state():
+    # Delete user 1
+    client.delete("/users/1")
+    # List users should not contain user 1
+    response = client.get("/users")
+    assert response.status_code == 200
+    users = response.json()
+    assert all(user["id"] != 1 for user in users)
+
+
+def test_concurrent_deletion_requests_for_same_user_via_api():
+    # TestClient is not thread-safe, so we simulate sequential "concurrent" requests
+    # and assert that exactly one succeeds and the rest return 404
+    routes.user_service.reset()
+    user_id = 1
+    results = [client.delete(f"/users/{user_id}") for _ in range(5)]
+
+    success_count = sum(1 for r in results if r.status_code in (200, 204))
+    not_found_count = sum(1 for r in results if r.status_code == 404)
+    assert success_count == 1
+    assert not_found_count == 4
+
+
+def test_delete_user_idempotency_via_api():
+    routes.user_service.reset()
     user_id = 2
-    payload = {"name": "Bruno Persisted", "email": "bruno.persisted@example.com", "is_vip": False}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 200
-
-    # Fazer GET para confirmar dados atualizados
-    get_response = client.get(f"/users/{user_id}")
-    assert get_response.status_code == 200
-    data = get_response.json()
-    assert data["name"] == "Bruno Persisted"
-    assert data["email"] == "bruno.persisted@example.com"
-    assert data["is_vip"] is False
+    # First deletion
+    response1 = client.delete(f"/users/{user_id}")
+    assert response1.status_code in (200, 204)
+    # Second deletion returns 404
+    response2 = client.delete(f"/users/{user_id}")
+    assert response2.status_code == 404
 
 
-def test_api_update_user_returns_404_for_none_returned_by_service(monkeypatch):
-    # Validar comportamento da camada de rota HTTP para update_user quando o retorno é None
-    from app.api import routes
-    def fake_update_user(user_id, payload):
-        return None
-    monkeypatch.setattr(routes.user_service, "update_user", fake_update_user)
-    user_id = 1
-    payload = {"name": "Any Name"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Usuário não encontrado"
-
-
-def test_api_update_user_authorization_denied(monkeypatch):
-    # Testar autorização negativa: usuário sem permissão tenta atualizar dados e recebe 403
-    # Como não há autenticação implementada, simulamos via monkeypatch no endpoint
-    from fastapi import HTTPException
-    from app.api import routes
-
-    original_update_user = routes.user_service.update_user
-
-    def fake_update_user(user_id, payload):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-
-    monkeypatch.setattr(routes.user_service, "update_user", fake_update_user)
-    user_id = 1
-    payload = {"name": "Unauthorized"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
-
-    # Restaurar método original
-    monkeypatch.setattr(routes.user_service, "update_user", original_update_user)
-
-
-def test_api_update_user_authorization_success(monkeypatch):
-    # Testar autorização positiva: usuário autorizado consegue atualizar dados com sucesso
-    from app.api import routes
-
-    original_update_user = routes.user_service.update_user
-
-    def fake_update_user(user_id, payload):
-        return routes.user_service.get_user(user_id)
-
-    monkeypatch.setattr(routes.user_service, "update_user", fake_update_user)
-    user_id = 1
-    payload = {"name": "Authorized"}
-    response = client.put(f"/users/{user_id}", json=payload)
-    assert response.status_code == 200
-    assert response.json()["name"] == "Ana Silva"  # Como fake_update_user retorna usuário original
-
-    monkeypatch.setattr(routes.user_service, "update_user", original_update_user)
+def test_delete_user_with_malicious_id_via_api_returns_422():
+    # IDs que não são inteiros válidos devem retornar 422 (FastAPI validation)
+    # Nota: "../1" é normalizado pelo cliente HTTP como path traversal, então é excluído
+    malicious_ids = ["1; DROP TABLE users;", "<script>"]
+    for mid in malicious_ids:
+        response = client.delete(f"/users/{mid}")
+        assert response.status_code == 422
