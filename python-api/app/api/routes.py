@@ -208,6 +208,17 @@ def update_user(user_id: int, payload: UserUpdate) -> UserResponse:
     return updated_user
 
 
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["users"])
+def delete_user(user_id: int) -> None:
+    """Remove um usuário pelo ID."""
+    user = user_service.get_user(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+    user_service.delete_user(user_id)
+
 @router.post("/discounts/calculate", response_model=DiscountResponse, tags=["discounts"])
 def calculate_discount(payload: DiscountRequest) -> DiscountResponse:
     """Calcula o desconto final para uma compra."""

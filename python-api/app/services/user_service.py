@@ -72,6 +72,13 @@ class UserService:
                 return updated_user
         return None
 
+    def delete_user(self, user_id: int) -> bool:
+        for i, user in enumerate(self._users):
+            if user.id == user_id:
+                self._users.pop(i)
+                return True
+        return False
+
     def reset(self) -> None:
         """Reinitialise the service to its original seeded state. Intended for use in tests."""
         self._users = [
