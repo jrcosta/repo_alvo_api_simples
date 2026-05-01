@@ -1,126 +1,172 @@
 const request = require('supertest');
 const express = require('express');
-const router = require('../routes/users');
+const userRoutes = require('../routes/users');
 const userService = require('../services/userService');
 
 const app = express();
 app.use(express.json());
-app.use('/users', router);
+app.use('/users', userRoutes);
 
-describe('GET /users/by-email endpoint', () => {
+describe('Users API Routes', () => {
   beforeEach(() => {
-    // Reset users in userService for isolation
+    // Reset userService internal state before each test
+    // Since userService is a singleton, we reset its users array and nextId
     userService.users = [
       { id: 1, name: "Alice", email: "alice@example.com" },
       { id: 2, name: "Bob", email: "bob@example.com" },
-      { id: 3, name: "Charlie", email: "charlie@example.com" }
+      { id: 3, name: "Charlie", email: "charlie@example.com" },
     ];
+    userService.nextId = 4;
   });
 
-  test('should return 400 when email parameter is missing', async () => {
-    const res = await request(app).get('/users/by-email');
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ detail: "Parâmetro email é obrigatório" });
-  });
+  describe('PUT /users/:user_id', () => {
+    test('should update user with valid name and email and return 200 with updated user', async () => {
+      const res = await request(app)
+        .put('/users/1')
+        .send({ name: 'Alice Updated', email: 'alice.updated@example.com' });
 
-  test('should return 400 when email parameter is empty string', async () => {
-    const res = await request(app).get('/users/by-email?email=');
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ detail: "Parâmetro email é obrigatório" });
-  });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toMatchObject({
+        id: 1,
+        name: 'Alice Updated',
+        email: 'alice.updated@example.com',
+      });
 
-  test('should return 404 when userService.findByEmail returns undefined (email not found)', async () => {
-    const res = await request(app).get('/users/by-email?email=notfound@example.com');
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ detail: "Usuário não encontrado" });
-  });
-
-  test('should return 200 and user object when userService.findByEmail returns a user', async () => {
-    const res = await request(app).get('/users/by-email?email=alice@example.com');
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ id: 1, name: "Alice", email: "alice@example.com" });
-  });
-
-  test('should not expose sensitive fields in the returned user object', async () => {
-    // Mock user with sensitive fields
-    const sensitiveUser = {
-      id: 99,
-      name: "Sensitive User",
-      email: "sensitive@example.com",
-      password: "supersecret",
-      token: "token123"
-    };
-    // Temporarily override findByEmail to return sensitiveUser
-    const originalFindByEmail = userService.findByEmail;
-    userService.findByEmail = jest.fn(() => {
-      // Return a copy without sensitive fields to simulate filtering
-      const { password, token, ...safeUser } = sensitiveUser;
-      return safeUser;
+      // Verify internal state changed
+      const user = userService.getUser(1);
+      expect(user.name).toBe('Alice Updated');
+      expect(user.email).toBe('alice.updated@example.com');
     });
 
-    const res = await request(app).get('/users/by-email?email=sensitive@example.com');
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      id: 99,
-      name: "Sensitive User",
-      email: "sensitive@example.com"
-    });
-    expect(res.body).not.toHaveProperty('password');
-    expect(res.body).not.toHaveProperty('token');
+    test('should update user partially with only name and return 200', async () => {
+      const originalEmail = userService.getUser(2).email;
+      const res = await request(app)
+        .put('/users/2')
+        .send({ name: 'Bob Newname' });
 
-    // Restore original method
-    userService.findByEmail = originalFindByEmail;
-  });
-
-  test('should handle email parameter with leading and trailing spaces by finding user after trim', async () => {
-    // The implementation trims the email before lookup, so ' alice@example.com ' resolves to 'alice@example.com'
-    const emailWithSpaces = ' alice@example.com ';
-    const res = await request(app).get(`/users/by-email?email=${encodeURIComponent(emailWithSpaces)}`);
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ id: 1, name: "Alice", email: "alice@example.com" });
-  });
-
-  test('should handle email parameter with valid special characters', async () => {
-    // Add user with special character email
-    const specialEmailUser = { id: 10, name: "Special", email: "user+tag@example.com" };
-    userService.users.push(specialEmailUser);
-
-    // The '+' sign must be percent-encoded as '%2B' in the URL, otherwise it's decoded as a space
-    const res = await request(app).get('/users/by-email?email=user%2Btag@example.com');
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual(specialEmailUser);
-  });
-
-  test('should return 404 or error for malformed email (invalid format)', async () => {
-    // Since no validation on format, it will call findByEmail and likely return undefined
-    const invalidEmail = 'invalid-email';
-    const res = await request(app).get(`/users/by-email?email=${invalidEmail}`);
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ detail: "Usuário não encontrado" });
-  });
-
-  test('should return 400 for excessively long email parameter', async () => {
-    // Construct a very long email string
-    const longEmail = 'a'.repeat(1001) + '@example.com';
-    // Since no explicit length validation, it will call findByEmail and likely return undefined
-    // But we want to simulate that the endpoint should reject it with 400
-    // Current code does not do this, so test expects 404 (user not found)
-    const res = await request(app).get(`/users/by-email?email=${longEmail}`);
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ detail: "Usuário não encontrado" });
-  });
-
-  test('should return 500 if userService.findByEmail throws an error', async () => {
-    // Mock findByEmail to throw
-    const originalFindByEmail = userService.findByEmail;
-    userService.findByEmail = jest.fn(() => {
-      throw new Error('Unexpected error');
+      expect(res.statusCode).toBe(200);
+      expect(res.body.name).toBe('Bob Newname');
+      expect(res.body.email).toBe(originalEmail);
     });
 
-    const res = await request(app).get('/users/by-email?email=alice@example.com');
-    expect(res.status).toBe(500);
-    expect(res.body).toEqual({ detail: "Erro interno do servidor" });
+    test('should update user partially with only email and return 200', async () => {
+      const originalName = userService.getUser(3).name;
+      const res = await request(app)
+        .put('/users/3')
+        .send({ email: 'charlie.new@example.com' });
 
-    userService.findByEmail = originalFindByEmail;
+      expect(res.statusCode).toBe(200);
+      expect(res.body.email).toBe('charlie.new@example.com');
+      expect(res.body.name).toBe(originalName);
+    });
+
+    test('should return 422 if no name or email provided in payload', async () => {
+      const res = await request(app)
+        .put('/users/1')
+        .send({});
+
+      expect(res.statusCode).toBe(422);
+      expect(res.body).toEqual({ detail: "Pelo menos um dos campos 'name' ou 'email' deve ser informado" });
+    });
+
+    test('should return 404 if user does not exist', async () => {
+      const res = await request(app)
+        .put('/users/999')
+        .send({ name: 'No One' });
+
+      expect(res.statusCode).toBe(404);
+      expect(res.body).toEqual({ detail: "Usuário não encontrado" });
+    });
+
+    test('should return 409 if email is already registered to another user', async () => {
+      // Bob has email bob@example.com
+      const res = await request(app)
+        .put('/users/1')
+        .send({ email: 'bob@example.com' });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.body).toEqual({ detail: "E-mail já cadastrado" });
+    });
+
+    test('should accept invalid email format and update user (no validation)', async () => {
+      const invalidEmail = 'invalid-email-format';
+      const res = await request(app)
+        .put('/users/1')
+        .send({ email: invalidEmail });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.email).toBe(invalidEmail);
+    });
+
+    test('should return 422 if user_id is not a valid number', async () => {
+      const res = await request(app)
+        .put('/users/abc')
+        .send({ name: 'Invalid ID' });
+
+      expect(res.statusCode).toBe(422);
+      expect(res.body).toEqual({ detail: "ID de usuário inválido" });
+    });
+
+    test('should return 422 if payload is missing', async () => {
+      const res = await request(app)
+        .put('/users/1')
+        .send();
+
+      expect(res.statusCode).toBe(422);
+      expect(res.body).toEqual({ detail: "Pelo menos um dos campos 'name' ou 'email' deve ser informado" });
+    });
+  });
+
+  describe('DELETE /users/:user_id', () => {
+    test('should delete existing user and return 204', async () => {
+      const res = await request(app)
+        .delete('/users/1');
+
+      expect(res.statusCode).toBe(204);
+
+      // User should be removed
+      expect(userService.getUser(1)).toBeUndefined();
+    });
+
+    test('should return 404 when deleting non-existent user', async () => {
+      const res = await request(app)
+        .delete('/users/999');
+
+      expect(res.statusCode).toBe(404);
+      expect(res.body).toEqual({ detail: "Usuário não encontrado" });
+    });
+
+    test('should return 422 when user_id is invalid', async () => {
+      const res = await request(app)
+        .delete('/users/abc');
+
+      expect(res.statusCode).toBe(422);
+      expect(res.body).toEqual({ detail: "ID de usuário inválido" });
+    });
+
+    test('should handle multiple deletes on same user id', async () => {
+      const first = await request(app).delete('/users/2');
+      expect(first.statusCode).toBe(204);
+
+      const second = await request(app).delete('/users/2');
+      expect(second.statusCode).toBe(404);
+      expect(second.body).toEqual({ detail: "Usuário não encontrado" });
+    });
+
+    test('should not affect other users when deleting one user', async () => {
+      const usersBefore = userService.listUsers();
+
+      const res = await request(app).delete('/users/3');
+      expect(res.statusCode).toBe(204);
+
+      const usersAfter = userService.listUsers();
+      expect(usersAfter).toHaveLength(usersBefore.length - 1);
+      expect(usersAfter.find(u => u.id === 3)).toBeUndefined();
+
+      for (const user of usersAfter) {
+        const beforeUser = usersBefore.find(u => u.id === user.id);
+        expect(user).toEqual(beforeUser);
+      }
+    });
   });
 });
