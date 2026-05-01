@@ -156,7 +156,7 @@ router.get('/', (req, res) => {
 
 router.put('/:user_id', (req, res) => {
   const userId = parseInt(req.params.user_id, 10);
-  if (isNaN(userId)) {
+  if (isNaN(userId) || userId <= 0) {
     return res.status(422).json({ detail: 'ID de usuário inválido' });
   }
 
@@ -187,7 +187,7 @@ router.put('/:user_id', (req, res) => {
 
 router.delete('/:user_id', (req, res) => {
   const userId = parseInt(req.params.user_id, 10);
-  if (isNaN(userId)) {
+  if (isNaN(userId) || userId <= 0) {
     return res.status(422).json({ detail: 'ID de usuário inválido' });
   }
   const user = userService.getUser(userId);

@@ -22,10 +22,10 @@ class ProductService {
       results = results.filter(p => p.name.toLowerCase().includes(term));
     }
     if (minPrice !== undefined) {
-      results = results.filter(p => p.effectivePrice() >= minPrice);
+      results = results.filter(p => this._effectivePrice(p) >= minPrice);
     }
     if (maxPrice !== undefined) {
-      results = results.filter(p => p.effectivePrice() <= maxPrice);
+      results = results.filter(p => this._effectivePrice(p) <= maxPrice);
     }
     if (inStock) {
       results = results.filter(p => p.stock > 0);
@@ -114,14 +114,19 @@ class ProductService {
   }
 
   listCategories() {
-    return [...new Set(this.products.map(p => p.category))].sort();
+    return [...new Set(this.products.map(p => p.category.toLowerCase()))].sort();
+  }
+
+  _effectivePrice(product) {
+    const discount = this.discounts[product.id] || 0;
+    return discount > 0
+      ? parseFloat((product.price * (1 - discount / 100)).toFixed(2))
+      : product.price;
   }
 
   _serialize(product) {
+    const effectivePrice = this._effectivePrice(product);
     const discount = this.discounts[product.id] || 0;
-    const effectivePrice = discount > 0
-      ? parseFloat((product.price * (1 - discount / 100)).toFixed(2))
-      : product.price;
     return {
       id: product.id,
       name: product.name,

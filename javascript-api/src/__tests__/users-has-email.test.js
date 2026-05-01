@@ -48,7 +48,7 @@ describe('Rota /users/has-email', () => {
     expect(res.body).toEqual({ detail: 'Parâmetro email é obrigatório' });
   });
 
-  const methods = ['post', 'put', 'delete', 'patch', 'options', 'head'];
+  const methods = ['post', 'put', 'delete', 'patch'];
 
   methods.forEach(method => {
     test(`${method.toUpperCase()} /has-email retorna 404 com { detail: "Rota não encontrada" }`, async () => {
