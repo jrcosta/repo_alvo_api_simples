@@ -123,6 +123,10 @@ router.get('/has-email', (req, res) => {
   return res.json({ email: email.trim(), exists });
 });
 
+router.all('/has-email', (req, res) => {
+  return res.status(404).json({ detail: "Rota não encontrada" });
+});
+
 router.get('/:user_id/age-estimate', async (req, res) => {
   const userId = parseInt(req.params.user_id, 10);
   const user = userService.getUser(userId);
