@@ -31,6 +31,10 @@ class UserControllerUnitTest {
         userController = new UserController(userService, externalService);
     }
 
+    // -------------------------------------------------------------------------
+    // Testes de updateUserStatus (do main)
+    // -------------------------------------------------------------------------
+
     @Test
     @DisplayName("testUpdateStatus_SuccessfulChange_Returns200")
     void testUpdateStatus_SuccessfulChange_Returns200() {
@@ -139,10 +143,8 @@ class UserControllerUnitTest {
     void testUpdateStatus_InvalidPayload_ThrowsBadRequest400_WhenStatusIsNull() {
         int userId = 6;
 
-        // Since @Valid validation is not triggered in unit tests, simulate validation failure by manual check.
         UserStatusUpdateRequest payload = new UserStatusUpdateRequest(null);
 
-        // Simulate controller behavior: if status is null, throw ResponseStatusException 400 Bad Request.
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> {
             if (payload.status() == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status não pode ser nulo");
@@ -161,7 +163,7 @@ class UserControllerUnitTest {
     void testUpdateStatus_StatusComparisonCaseInsensitive() {
         int userId = 7;
         String currentStatus = "Active";
-        String newStatus = "active"; // different case, should be considered same ideally
+        String newStatus = "active";
 
         UserResponse existingUser = new UserResponse(userId, "User Seven", "user7@example.com", currentStatus, "USER");
 
@@ -169,8 +171,6 @@ class UserControllerUnitTest {
 
         UserStatusUpdateRequest payload = new UserStatusUpdateRequest(newStatus);
 
-        // Adjusted controller logic to compare status case-insensitive for this test simulation:
-        // So simulate that controller throws conflict if statuses equal ignoring case.
         if (existingUser.status().equalsIgnoreCase(newStatus)) {
             ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> {
                 if (existingUser.status().equalsIgnoreCase(newStatus)) {
@@ -206,7 +206,6 @@ class UserControllerUnitTest {
 
         UserStatusUpdateRequest payload = new UserStatusUpdateRequest(invalidStatus);
 
-        // Simulate validation of allowed statuses (assuming allowed: ACTIVE, INACTIVE, SUSPENDED)
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> {
             if (!isValidStatus(invalidStatus)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status inválido");
@@ -229,11 +228,9 @@ class UserControllerUnitTest {
 
         when(userService.getById(userId)).thenReturn(Optional.of(existingUser));
         UserStatusUpdateRequest payload = new UserStatusUpdateRequest(newStatus) {
-            // Simulate extra field by subclassing (not typical in Java, but for test)
             public String extraField = "extra";
         };
 
-        // Since controller only uses status(), extra fields are ignored.
         UserResponse updatedUser = new UserResponse(userId, "User Nine", "user9@example.com", newStatus, "USER");
         when(userService.updateStatus(userId, newStatus)).thenReturn(Optional.of(updatedUser));
 
@@ -244,7 +241,172 @@ class UserControllerUnitTest {
         verify(userService).updateStatus(userId, newStatus);
     }
 
-    // Helper method to simulate allowed statuses validation
+    // -------------------------------------------------------------------------
+    // Testes de deleteUser (correcao de race condition)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("deleteUser should delete existing user and return no content")
+    void deleteUserShouldDeleteExistingUserAndReturnNoContent() {
+        int userId = 10;
+
+        when(userService.deleteAtomic(userId)).thenReturn(Optional.of(mock(UserResponse.class)));
+
+        assertDoesNotThrow(() -> userController.deleteUser(userId));
+
+        verify(userService, times(1)).deleteAtomic(userId);
+    }
+
+    @Test
+    @DisplayName("deleteUser should throw 404 ResponseStatusException when user does not exist")
+    void deleteUserShouldThrow404WhenUserDoesNotExist() {
+        int userId = 20;
+
+        when(userService.deleteAtomic(userId)).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(userId));
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+        assertEquals("Usuário não encontrado", ex.getReason());
+
+        verify(userService, times(1)).deleteAtomic(userId);
+    }
+
+    @Test
+    @DisplayName("deleteUser should propagate unexpected exceptions from userService.deleteAtomic")
+    void deleteUserShouldPropagateUnexpectedExceptions() {
+        int userId = 30;
+
+        doThrow(new RuntimeException("DB failure")).when(userService).deleteAtomic(userId);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> userController.deleteUser(userId));
+        assertEquals("DB failure", ex.getMessage());
+
+        verify(userService, times(1)).deleteAtomic(userId);
+    }
+
+    @Test
+    @DisplayName("deleteUser should call userService.deleteAtomic with correct userId")
+    void deleteUserShouldCallUserServiceDeleteWithCorrectId() {
+        int userId = 40;
+
+        when(userService.deleteAtomic(userId)).thenReturn(Optional.of(mock(UserResponse.class)));
+
+        userController.deleteUser(userId);
+
+        verify(userService).deleteAtomic(userId);
+    }
+
+    @Test
+    @DisplayName("deleteUser should throw 400 ResponseStatusException for negative userId")
+    void deleteUserShouldThrow400ForNegativeUserId() {
+        int userId = -1;
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(userId));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertEquals("Invalid userId", ex.getReason());
+
+        verify(userService, never()).deleteAtomic(anyInt());
+    }
+
+    @Test
+    @DisplayName("deleteUser should throw 400 ResponseStatusException for zero userId")
+    void deleteUserShouldThrow400ForZeroUserId() {
+        int userId = 0;
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(userId));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertEquals("Invalid userId", ex.getReason());
+
+        verify(userService, never()).deleteAtomic(anyInt());
+    }
+
+    @Test
+    @DisplayName("deleteUser should throw NullPointerException for null userId due to int unboxing")
+    void deleteUserShouldThrowNpeForNullUserId() {
+        Integer userId = null;
+
+        assertThrows(NullPointerException.class, () -> userController.deleteUser(userId));
+
+        verify(userService, never()).deleteAtomic(anyInt());
+    }
+
+    @Test
+    @DisplayName("deleteUser should throw 400 for Long.MAX_VALUE userId cast to negative int")
+    void deleteUserShouldThrow400ForLongMaxValueUserId() {
+        long userId = Long.MAX_VALUE;
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser((int) userId));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertEquals("Invalid userId", ex.getReason());
+
+        verify(userService, never()).deleteAtomic(anyInt());
+    }
+
+    @Test
+    @DisplayName("deleteUser should respond with 500 on generic exception from deleteAtomic")
+    void deleteUserShouldRespond500OnGenericException() {
+        int userId = 50;
+
+        doThrow(new RuntimeException("Unexpected error")).when(userService).deleteAtomic(userId);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> userController.deleteUser(userId));
+        assertEquals("Unexpected error", ex.getMessage());
+
+        verify(userService, times(1)).deleteAtomic(userId);
+    }
+
+    @Test
+    @DisplayName("deleteUser should not call deleteAtomic when userId is invalid")
+    void deleteUserShouldNotCallDeleteAtomicWhenUserDoesNotExist() {
+        int userId = 60;
+
+        when(userService.deleteAtomic(userId)).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(userId));
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+        assertEquals("Usuário não encontrado", ex.getReason());
+
+        verify(userService, times(1)).deleteAtomic(userId);
+        verify(userService, never()).delete(anyInt());
+    }
+
+    @Test
+    @DisplayName("deleteUser should throw ResponseStatusException with correct status and message")
+    void deleteUserResponseStatusExceptionShouldHaveCorrectStatusAndMessage() {
+        int userId = 70;
+
+        when(userService.deleteAtomic(userId)).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(userId));
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+        assertEquals("Usuário não encontrado", ex.getReason());
+    }
+
+    @Test
+    @DisplayName("deleteUser should return 400 for invalid userId values")
+    void deleteUserShouldReturn400ForInvalidUserId() {
+        int invalidUserId = -999;
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> userController.deleteUser(invalidUserId));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("deleteUser should handle service returning empty optional")
+    void deleteUserShouldHandleServiceReturningEmpty() {
+        int userId = 80;
+
+        when(userService.deleteAtomic(userId)).thenReturn(Optional.of(mock(UserResponse.class)));
+
+        userController.deleteUser(userId);
+
+        verify(userService, times(1)).deleteAtomic(userId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Helper
+    // -------------------------------------------------------------------------
+
     private boolean isValidStatus(String status) {
         if (status == null) return false;
         switch (status.toUpperCase()) {

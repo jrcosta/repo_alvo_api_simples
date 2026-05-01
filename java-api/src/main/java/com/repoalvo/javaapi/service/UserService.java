@@ -88,6 +88,7 @@ public class UserService {
         }
         return Optional.empty();
     }
+
     public synchronized UserResponse update(int userId, UserCreateRequest payload) {
         UserUpdateRequest updateRequest = new UserUpdateRequest(
                 payload.name(),
@@ -100,6 +101,24 @@ public class UserService {
 
     public synchronized void delete(int userId) {
         users.removeIf(u -> u.id() == userId);
+    }
+
+    /**
+     * Verifica existencia, regra vip e deleta atomicamente.
+     * Retorna o usuario deletado, ou empty se nao existir.
+     * Lanca IllegalStateException se o usuario for vip (nao pode ser deletado).
+     */
+    public synchronized Optional<UserResponse> deleteAtomic(int userId) {
+        Optional<UserResponse> found = users.stream().filter(u -> u.id() == userId).findFirst();
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        UserResponse user = found.get();
+        if (user.vip()) {
+            throw new IllegalStateException("Cannot delete critical admin user");
+        }
+        users.removeIf(u -> u.id() == userId);
+        return Optional.of(user);
     }
 
     public synchronized Optional<UserResponse> updateStatus(int userId, String newStatus) {
@@ -128,4 +147,3 @@ public class UserService {
                 .toList();
     }
 }
-
