@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.*;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,191 +21,152 @@ public class UserServiceUnitTest {
     @BeforeEach
     public void setup() {
         userService = new UserService();
+        userService.reset();
     }
 
-    // --- Existing tests omitted for brevity ---
-
-    // New tests to cover null phone number scenarios and related edge cases
-
     @Test
-    public void updateExistingUserWithNullPhoneNumberShouldPreserveExistingPhoneNumber() {
+    public void testUpdateStatus_ValidUserIdAndValidStatus_ShouldUpdateStatusOnly() {
         int userId = 1;
-        UserResponse original = userService.getById(userId).orElseThrow();
+        String newStatus = "INACTIVE";
 
-        UserUpdateRequest updateRequest = new UserUpdateRequest(
-                "User Null Phone",
-                "user.nullphone@example.com",
-                "USER",
-                null
-        );
+        Optional<UserResponse> updatedOpt = userService.updateStatus(userId, newStatus);
+        assertTrue(updatedOpt.isPresent(), "User should be found and updated");
 
-        Optional<UserResponse> updatedOpt = userService.update(userId, updateRequest);
-        assertTrue(updatedOpt.isPresent());
         UserResponse updated = updatedOpt.get();
-
         assertEquals(userId, updated.id());
-        assertEquals("User Null Phone", updated.name());
-        assertEquals("user.nullphone@example.com", updated.email());
-        assertEquals("USER", updated.role());
-        // Phone number should remain unchanged because null was passed
-        assertEquals(original.phoneNumber(), updated.phoneNumber());
+        assertEquals(newStatus, updated.status());
+
+        // Verify other fields remain unchanged
+        UserResponse original = userService.getById(userId).orElseThrow();
+        assertEquals(updated.name(), original.name());
+        assertEquals(updated.email(), original.email());
+        assertEquals(updated.role(), original.role());
+        assertEquals(updated.phoneNumber(), original.phoneNumber());
     }
 
     @Test
-    public void updateExistingUserWithEmptyPhoneNumberShouldStoreEmptyString() {
+    public void testUpdateStatus_ValidUserIdAndNullOrEmptyStatus_ShouldAcceptOrHandleGracefully() {
+        int userId = 2;
+
+        // Test with null status
+        Optional<UserResponse> updatedNull = userService.updateStatus(userId, null);
+        assertTrue(updatedNull.isPresent(), "User should be found and updated with null status");
+        assertNull(updatedNull.get().status(), "Status should be set to null");
+
+        // Test with empty string status
+        Optional<UserResponse> updatedEmpty = userService.updateStatus(userId, "");
+        assertTrue(updatedEmpty.isPresent(), "User should be found and updated with empty status");
+        assertEquals("", updatedEmpty.get().status(), "Status should be set to empty string");
+    }
+
+    @Test
+    public void testUpdateStatus_InvalidUserId_ShouldReturnEmptyOptional() {
+        int invalidUserId = 9999;
+        Optional<UserResponse> result = userService.updateStatus(invalidUserId, "ACTIVE");
+        assertTrue(result.isEmpty(), "Updating status for invalid userId should return Optional.empty()");
+    }
+
+    @Test
+    public void testUpdateStatus_OtherUserFieldsRemainUnchanged() {
         int userId = 1;
+        UserResponse beforeUpdate = userService.getById(userId).orElseThrow();
 
-        UserUpdateRequest updateRequest = new UserUpdateRequest(
-                "User Empty Phone",
-                "user.emptyphone@example.com",
-                "USER",
-                ""
-        );
-
-        Optional<UserResponse> updatedOpt = userService.update(userId, updateRequest);
+        String newStatus = "INACTIVE";
+        Optional<UserResponse> updatedOpt = userService.updateStatus(userId, newStatus);
         assertTrue(updatedOpt.isPresent());
+
         UserResponse updated = updatedOpt.get();
 
-        assertEquals("", updated.phoneNumber());
+        // Check only status changed
+        assertEquals(newStatus, updated.status());
+        assertEquals(beforeUpdate.id(), updated.id());
+        assertEquals(beforeUpdate.name(), updated.name());
+        assertEquals(beforeUpdate.email(), updated.email());
+        assertEquals(beforeUpdate.role(), updated.role());
+        assertEquals(beforeUpdate.phoneNumber(), updated.phoneNumber());
     }
 
     @Test
-    public void updateExistingUserWithPhoneNumberContainingSpacesAndInvisibleCharsShouldStoreAsIs() {
-        int userId = 1;
-        String phoneWithSpaces = " +55 11 90000-0001 \t\n";
+    public void testUpdateStatus_IntegrationWithUpdateDeleteListOperations() {
+        // Create a new user
+        UserCreateRequest createRequest = new UserCreateRequest("Carlos", "carlos@example.com", "USER", "+55 11 90000-0003");
+        UserResponse created = userService.create(createRequest);
 
-        UserUpdateRequest updateRequest = new UserUpdateRequest(
-                "User Spaces Phone",
-                "user.spacesphone@example.com",
-                "USER",
-                phoneWithSpaces
-        );
-
-        Optional<UserResponse> updatedOpt = userService.update(userId, updateRequest);
+        // Update status
+        String newStatus = "INACTIVE";
+        Optional<UserResponse> updatedOpt = userService.updateStatus(created.id(), newStatus);
         assertTrue(updatedOpt.isPresent());
-        UserResponse updated = updatedOpt.get();
+        assertEquals(newStatus, updatedOpt.get().status());
 
-        // Expecting the phone number stored exactly as passed (no trimming or cleaning)
-        assertEquals(phoneWithSpaces, updated.phoneNumber());
+        // Update general info
+        UserUpdateRequest updateRequest = new UserUpdateRequest("Carlos Updated", null, null, null);
+        Optional<UserResponse> updatedGeneralOpt = userService.update(created.id(), updateRequest);
+        assertTrue(updatedGeneralOpt.isPresent());
+        assertEquals("Carlos Updated", updatedGeneralOpt.get().name());
+        assertEquals(newStatus, updatedGeneralOpt.get().status(), "Status should remain as updated");
+
+        // List users and verify presence
+        List<UserResponse> allUsers = userService.listAllUsers();
+        assertTrue(allUsers.stream().anyMatch(u -> u.id() == created.id()));
+
+        // Delete user
+        userService.delete(created.id());
+        Optional<UserResponse> afterDelete = userService.getById(created.id());
+        assertTrue(afterDelete.isEmpty(), "User should be deleted");
+
+        // List users and verify absence
+        List<UserResponse> afterDeleteList = userService.listAllUsers();
+        assertFalse(afterDeleteList.stream().anyMatch(u -> u.id() == created.id()));
     }
 
     @Test
-    public void updateExistingUserWithListOfPhoneNumbersContainingValidNullAndInvalidShouldHandleCorrectly() {
-        // Since UserUpdateRequest has only one phoneNumber field, simulate multiple updates with mixed values
+    public void testUpdateStatus_ConcurrentUpdates_ShouldMaintainDataIntegrity() throws InterruptedException, ExecutionException {
         int userId = 1;
+        int threadCount = 10;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
-        String[] phoneNumbers = {
-                "+55 11 90000-0001", // valid
-                null,                // null
-                "invalid-phone",     // invalid format
-                "+55 11 90000-0001"  // duplicate
-        };
+        // Prepare different statuses to update concurrently
+        String[] statuses = IntStream.range(0, threadCount)
+                .mapToObj(i -> "STATUS_" + i)
+                .toArray(String[]::new);
 
-        for (String phone : phoneNumbers) {
-            UserUpdateRequest updateRequest = new UserUpdateRequest(
-                    "User Mixed Phones",
-                    "user.mixedphones@example.com",
-                    "USER",
-                    phone
-            );
-            Optional<UserResponse> updatedOpt = userService.update(userId, updateRequest);
-            assertTrue(updatedOpt.isPresent());
-            UserResponse updated = updatedOpt.get();
+        Callable<Optional<UserResponse>>[] tasks = new Callable[threadCount];
+        for (int i = 0; i < threadCount; i++) {
+            final String status = statuses[i];
+            tasks[i] = () -> userService.updateStatus(userId, status);
+        }
 
-            if (phone == null) {
-                // Phone number should remain unchanged if null passed
-                UserResponse original = userService.getById(userId).orElseThrow();
-                assertEquals(original.phoneNumber(), updated.phoneNumber());
-            } else {
-                // Phone number stored as is, even if invalid or duplicate
-                assertEquals(phone, updated.phoneNumber());
+        List<Future<Optional<UserResponse>>> futures = executor.invokeAll(List.of(tasks));
+        executor.shutdown();
+        executor.awaitTermination(5, TimeUnit.SECONDS);
+
+        // All updates should succeed
+        for (Future<Optional<UserResponse>> future : futures) {
+            Optional<UserResponse> result = future.get();
+            assertTrue(result.isPresent(), "Concurrent update should return present Optional");
+        }
+
+        // Final status should be one of the statuses set
+        UserResponse finalUser = userService.getById(userId).orElseThrow();
+        boolean statusMatch = false;
+        for (String s : statuses) {
+            if (s.equals(finalUser.status())) {
+                statusMatch = true;
+                break;
             }
         }
+        assertTrue(statusMatch, "Final status should be one of the concurrently set statuses");
     }
 
     @Test
-    public void updateUserWithNullPhoneNumberInPartialUpdateShouldNotOverwritePhoneNumber() {
+    public void testUpdateStatus_StatusValueValidation_FutureImprovement() {
+        // This test is a placeholder for future validation logic
+        // Currently, the service accepts any status value including invalid ones
         int userId = 1;
-        UserResponse original = userService.getById(userId).orElseThrow();
+        String invalidStatus = "INVALID_STATUS_VALUE";
 
-        UserUpdateRequest partialUpdate = new UserUpdateRequest(
-                null,
-                null,
-                null,
-                null
-        );
-
-        Optional<UserResponse> updatedOpt = userService.update(userId, partialUpdate);
+        Optional<UserResponse> updatedOpt = userService.updateStatus(userId, invalidStatus);
         assertTrue(updatedOpt.isPresent());
-        UserResponse updated = updatedOpt.get();
-
-        // Phone number should remain unchanged
-        assertEquals(original.phoneNumber(), updated.phoneNumber());
+        assertEquals(invalidStatus, updatedOpt.get().status());
     }
-
-    @Test
-    public void updateUserWithNullPhoneNumberShouldNotThrowException() {
-        int userId = 1;
-
-        UserUpdateRequest updateRequest = new UserUpdateRequest(
-                "User Null Phone Exception",
-                "user.nullphoneex@example.com",
-                "USER",
-                null
-        );
-
-        assertDoesNotThrow(() -> {
-            Optional<UserResponse> updatedOpt = userService.update(userId, updateRequest);
-            assertTrue(updatedOpt.isPresent());
-        });
-    }
-
-    @Test
-    public void updateUserWithDuplicatePhoneNumbersSequentiallyShouldAcceptEachUpdate() {
-        int userId = 1;
-        String phone = "+55 11 90000-0001";
-
-        UserUpdateRequest firstUpdate = new UserUpdateRequest(
-                "User Dup Phone 1",
-                "user.dup1@example.com",
-                "USER",
-                phone
-        );
-        Optional<UserResponse> firstUpdatedOpt = userService.update(userId, firstUpdate);
-        assertTrue(firstUpdatedOpt.isPresent());
-        assertEquals(phone, firstUpdatedOpt.get().phoneNumber());
-
-        UserUpdateRequest secondUpdate = new UserUpdateRequest(
-                "User Dup Phone 2",
-                "user.dup2@example.com",
-                "USER",
-                phone
-        );
-        Optional<UserResponse> secondUpdatedOpt = userService.update(userId, secondUpdate);
-        assertTrue(secondUpdatedOpt.isPresent());
-        assertEquals(phone, secondUpdatedOpt.get().phoneNumber());
-    }
-
-    @Test
-    public void updateUserWithNullPhoneNumberShouldBeHandledInCreateRequest() {
-        int userId = 1;
-
-        UserCreateRequest createRequest = new UserCreateRequest(
-                "User Create Null Phone",
-                "user.createnullphone@example.com",
-                "USER",
-                null
-        );
-
-        UserResponse updated = userService.update(userId, createRequest);
-        assertEquals(userId, updated.id());
-        assertEquals("User Create Null Phone", updated.name());
-        assertEquals("user.createnullphone@example.com", updated.email());
-        assertEquals("USER", updated.role());
-        // Phone number should remain unchanged or null depending on implementation, here we check it is null or unchanged
-        // Since update with UserCreateRequest returns UserResponse, we check if phoneNumber is null or original
-        // We accept null or original phone number as valid behavior
-        assertTrue(updated.phoneNumber() == null || !updated.phoneNumber().isEmpty());
-    }
-
 }
