@@ -102,6 +102,25 @@ public class UserService {
         users.removeIf(u -> u.id() == userId);
     }
 
+    public synchronized Optional<UserResponse> updateStatus(int userId, String newStatus) {
+        for (int i = 0; i < users.size(); i++) {
+            UserResponse existing = users.get(i);
+            if (existing.id() == userId) {
+                UserResponse updated = new UserResponse(
+                        existing.id(),
+                        existing.name(),
+                        existing.email(),
+                        newStatus,
+                        existing.role(),
+                        existing.phoneNumber()
+                );
+                users.set(i, updated);
+                return Optional.of(updated);
+            }
+        }
+        return Optional.empty();
+    }
+
     public synchronized List<UserResponse> searchByPhoneNumber(String phoneNumber) {
         if (phoneNumber == null) return List.of();
         return users.stream()
