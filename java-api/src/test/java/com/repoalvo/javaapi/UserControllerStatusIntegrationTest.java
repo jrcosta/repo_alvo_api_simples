@@ -2,6 +2,7 @@ package com.repoalvo.javaapi;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoalvo.javaapi.service.UserService;
+import com.repoalvo.javaapi.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,11 +13,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.anyOf;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -228,7 +232,7 @@ class UserControllerStatusIntegrationTest {
                                 .content(body))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.id", is(2)))
-                        .andExpect(jsonPath("$.status").value(org.hamcrest.Matchers.anyOf(is("INACTIVE"), is("ACTIVE"))));
+                        .andExpect(jsonPath("$.status").value(anyOf(is("INACTIVE"), is("ACTIVE"))));
             } catch (Exception e) {
                 throw new RuntimeException(e);
             } finally {
@@ -244,7 +248,162 @@ class UserControllerStatusIntegrationTest {
         executor.shutdown();
 
         // After concurrency, user status should be either ACTIVE or INACTIVE (no invalid state)
-        String finalStatus = userService.getById(2).map(u -> u.status()).orElse("UNKNOWN");
-        assert(finalStatus.equals("ACTIVE") || finalStatus.equals("INACTIVE"));
+        String finalStatus = userService.getById(2).map(User::status).orElse("UNKNOWN");
+        assertTrue(finalStatus.equals("ACTIVE") || finalStatus.equals("INACTIVE"),
+                () -> "Final user status must be ACTIVE or INACTIVE but was: " + finalStatus);
+    }
+
+    // --- Novos testes unitários para UserService ---
+
+    @Test
+    @DisplayName("getById retorna Optional com usuário quando existe")
+    void testGetByIdReturnsUserWhenExists() {
+        Optional<User> userOpt = userService.getById(2);
+        assertTrue(userOpt.isPresent(), "Usuário com ID 2 deve existir");
+        User user = userOpt.get();
+        assertEquals(2, user.getId());
+        assertNotNull(user.status(), "Status do usuário não deve ser nulo");
+        assertFalse(user.status().isEmpty(), "Status do usuário não deve ser vazio");
+    }
+
+    @Test
+    @DisplayName("getById retorna Optional.empty quando usuário não existe")
+    void testGetByIdReturnsEmptyWhenUserNotExists() {
+        Optional<User> userOpt = userService.getById(9999);
+        assertTrue(userOpt.isEmpty(), "Usuário inexistente deve retornar Optional.empty");
+    }
+
+    @Test
+    @DisplayName("getById não lança exceção inesperada")
+    void testGetByIdDoesNotThrowException() {
+        assertDoesNotThrow(() -> {
+            userService.getById(2);
+            userService.getById(9999);
+        });
+    }
+
+    @Test
+    @DisplayName("status retorna string válida e não nula")
+    void testStatusMethodReturnsValidStatusString() {
+        Optional<User> userOpt = userService.getById(2);
+        assertTrue(userOpt.isPresent(), "Usuário com ID 2 deve existir");
+        String status = userOpt.get().status();
+        assertNotNull(status, "Status não deve ser nulo");
+        assertFalse(status.isEmpty(), "Status não deve ser vazio");
+        assertTrue(status.equals("ACTIVE") || status.equals("INACTIVE"),
+                "Status deve ser ACTIVE ou INACTIVE, mas foi: " + status);
+    }
+
+    @Test
+    @DisplayName("Simular ausência do usuário 2 e falha clara do teste")
+    void testUserNotFoundResultsInClearFailure() {
+        // Remove usuário 2 temporariamente
+        userService.removeUser(2);
+        Optional<User> userOpt = userService.getById(2);
+        assertTrue(userOpt.isEmpty(), "Usuário 2 deve estar ausente após remoção");
+
+        String finalStatus = userOpt.map(User::status).orElse("UNKNOWN");
+        assertEquals("UNKNOWN", finalStatus, "Status deve ser UNKNOWN para usuário ausente");
+
+        // Falha clara: lançar AssertionError com mensagem informativa
+        AssertionError error = assertThrows(AssertionError.class, () -> {
+            assertTrue(finalStatus.equals("ACTIVE") || finalStatus.equals("INACTIVE"),
+                    "Usuário 2 não encontrado ou status inválido: " + finalStatus);
+        });
+        assertTrue(error.getMessage().contains("Usuário 2 não encontrado ou status inválido"),
+                "Mensagem de erro deve conter informação clara sobre ausência ou status inválido");
+    }
+
+    @Test
+    @DisplayName("Múltiplas requisições PATCH concorrentes mantêm status válido")
+    void testConcurrentPatchRequestsMaintainValidStatus() throws Exception {
+        int threadCount = 20;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+
+        // Reset user 2 to ACTIVE before concurrency test
+        userService.updateStatus(2, "ACTIVE");
+
+        Runnable taskActivate = () -> {
+            try {
+                String body = objectMapper.writeValueAsString(Map.of("status", "ACTIVE"));
+                mockMvc.perform(patch("/users/2/status")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value(anyOf(is("ACTIVE"), is("INACTIVE"))));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            } finally {
+                latch.countDown();
+            }
+        };
+
+        Runnable taskDeactivate = () -> {
+            try {
+                String body = objectMapper.writeValueAsString(Map.of("status", "INACTIVE"));
+                mockMvc.perform(patch("/users/2/status")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value(anyOf(is("ACTIVE"), is("INACTIVE"))));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            } finally {
+                latch.countDown();
+            }
+        };
+
+        for (int i = 0; i < threadCount; i++) {
+            if (i % 2 == 0) {
+                executor.submit(taskActivate);
+            } else {
+                executor.submit(taskDeactivate);
+            }
+        }
+
+        latch.await();
+        executor.shutdown();
+
+        String finalStatus = userService.getById(2).map(User::status).orElse("UNKNOWN");
+        assertTrue(finalStatus.equals("ACTIVE") || finalStatus.equals("INACTIVE"),
+                () -> "Final user status must be ACTIVE or INACTIVE but was: " + finalStatus);
+    }
+
+    @Test
+    @DisplayName("getById retorna usuário com status inesperado e falha clara")
+    void testGetByIdWithUnexpectedStatusReportsAnomaly() {
+        // Manipula usuário 2 para status inválido diretamente no serviço
+        userService.updateStatus(2, "INVALID_STATUS");
+
+        Optional<User> userOpt = userService.getById(2);
+        assertTrue(userOpt.isPresent(), "Usuário 2 deve existir");
+
+        String status = userOpt.get().status();
+        assertNotNull(status, "Status não deve ser nulo");
+
+        boolean validStatus = status.equals("ACTIVE") || status.equals("INACTIVE");
+        if (!validStatus) {
+            fail("Usuário 2 possui status inesperado: " + status);
+        }
+    }
+
+    @Test
+    @DisplayName("getById retorna usuário com status nulo e falha clara")
+    void testGetByIdWithNullStatusFailsClearly() {
+        // Manipula usuário 2 para status nulo diretamente no serviço
+        userService.updateStatus(2, null);
+
+        Optional<User> userOpt = userService.getById(2);
+        assertTrue(userOpt.isPresent(), "Usuário 2 deve existir");
+
+        String status = userOpt.get().status();
+        assertNull(status, "Status deve ser nulo");
+
+        AssertionError error = assertThrows(AssertionError.class, () -> {
+            assertNotNull(status, "Status do usuário não pode ser nulo");
+        });
+        assertTrue(error.getMessage().contains("não pode ser nulo"),
+                "Mensagem de erro deve indicar claramente que status não pode ser nulo");
     }
 }

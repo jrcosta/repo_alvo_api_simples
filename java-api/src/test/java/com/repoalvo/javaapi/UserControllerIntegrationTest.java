@@ -1,8 +1,8 @@
 package com.repoalvo.javaapi;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoalvo.javaapi.service.UserService;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -32,7 +32,7 @@ class UserControllerIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private com.repoalvo.javaapi.service.UserService userService;
+    private UserService userService;
 
     @org.junit.jupiter.api.BeforeEach
     void setup() {
@@ -115,9 +115,8 @@ class UserControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /users/by-email is case insensitive for email parameter")
-    void getUserByEmailShouldBeCaseInsensitive() throws Exception {
-        // findByEmail uses equals() (case-sensitive), so uppercase email returns 404
+    @DisplayName("GET /users/by-email returns 404 for emails with different case than stored")
+    void getUserByEmailShouldReturn404ForEmailsWithDifferentCase() throws Exception {
         String emailUpperCase = "ANA@EXAMPLE.COM";
 
         mockMvc.perform(get("/users/by-email")
@@ -195,17 +194,36 @@ class UserControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("Simulate failure in userService.reset() and verify subsequent test fails with clear message")
-    void simulateResetFailureShouldFailSubsequentTests() {
-        // UserService constructor calls reset(), so the exception is thrown during construction
+    @DisplayName("Simulate failure in userService.reset() and verify exception is propagated")
+    void simulateResetFailureShouldThrowException() {
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> {
-            new com.repoalvo.javaapi.service.UserService() {
+            UserService failingService = new UserService() {
                 @Override
                 public synchronized void reset() {
                     throw new RuntimeException("Simulated reset failure");
                 }
             };
+            failingService.reset();
         });
         assertEquals("Simulated reset failure", thrown.getMessage());
+    }
+
+    @Test
+    @DisplayName("Simulate reset() failure with checked exception and verify handling")
+    void simulateResetFailureWithCheckedExceptionShouldThrowRuntimeException() {
+        RuntimeException thrown = assertThrows(RuntimeException.class, () -> {
+            UserService failingService = new UserService() {
+                @Override
+                public synchronized void reset() {
+                    try {
+                        throw new Exception("Checked exception in reset");
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            };
+            failingService.reset();
+        });
+        assertEquals("java.lang.Exception: Checked exception in reset", thrown.getMessage());
     }
 }

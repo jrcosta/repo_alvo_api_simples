@@ -222,3 +222,127 @@ class TestUserUpdateSchema:
             e["loc"] == ("is_vip",) and "bool" in e["type"]
             for e in errors
         )
+
+    @pytest.mark.parametrize(
+        "extra_field_name, expected_error_type",
+        [
+            ("extra_field", "extra_forbidden"),  # Pydantic v2
+            ("extra_field", "value_error.extra"),  # Pydantic v1 (compatibility)
+        ],
+    )
+    def test_create_instance_with_extra_fields_parametrized_error_types(self, extra_field_name, expected_error_type):
+        # Testar diferentes tipos de erros para campos extras conforme versão do Pydantic
+        kwargs = {
+            "name": "Valid Name",
+            "email": "valid@example.com",
+            "is_vip": True,
+            extra_field_name: "not_allowed"
+        }
+        with pytest.raises(ValidationError) as exc_info:
+            UserUpdate(**kwargs)
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == (extra_field_name,) and e["type"] == expected_error_type
+            for e in errors
+        )
+
+    def test_email_local_part_exactly_64_chars_is_accepted(self):
+        local_part = "a" * 64
+        email = f"{local_part}@example.com"
+        user_update = UserUpdate(email=email)
+        assert user_update.email == email
+
+    def test_email_local_part_greater_than_64_chars_should_raise_validation_error(self):
+        local_part = "a" * 65
+        email = f"{local_part}@example.com"
+        with pytest.raises(ValidationError) as exc_info:
+            UserUpdate(email=email)
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == ("email",) and e["type"].startswith("value_error")
+            for e in errors
+        )
+
+    def test_email_total_length_max_254_chars_is_accepted(self):
+        # Construir email com comprimento total 254 caracteres
+        # local part 64 chars + "@" + domain 189 chars = 254 total
+        local_part = "a" * 64
+        domain = "b" * 189 + ".com"  # 189 + 4 = 193 chars domain
+        email = f"{local_part}@{domain}"
+        assert len(email) == 254
+        user_update = UserUpdate(email=email)
+        assert user_update.email == email
+
+    def test_email_total_length_greater_than_254_chars_should_raise_validation_error(self):
+        # Construir email com comprimento total 255 caracteres
+        local_part = "a" * 64
+        domain = "b" * 190 + ".com"  # 190 + 4 = 194 chars domain
+        email = f"{local_part}@{domain}"
+        assert len(email) == 255
+        with pytest.raises(ValidationError) as exc_info:
+            UserUpdate(email=email)
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == ("email",) and e["type"].startswith("value_error")
+            for e in errors
+        )
+
+    @pytest.mark.parametrize(
+        "valid_email",
+        [
+            "user!#$%&'*+/=?^_`{|}~-@example.com",
+            "user.name+tag+sorting@example.com",
+            "user_name@example.com",
+            "user-name@example.com",
+            "user.name@example.co.uk",
+        ],
+    )
+    def test_email_with_valid_special_characters_in_local_part_is_accepted(self, valid_email):
+        user_update = UserUpdate(email=valid_email)
+        assert user_update.email == valid_email
+
+    @pytest.mark.parametrize(
+        "invalid_email",
+        [
+            "user name@example.com",  # space in local part
+            "user\"name@example.com",  # unescaped quote
+            "user(name)@example.com",  # parentheses
+            "user@-example.com",  # domain starts with hyphen
+            "user@example-.com",  # domain ends with hyphen
+            "user@example!.com",  # invalid char in domain
+        ],
+    )
+    def test_email_with_invalid_characters_should_raise_validation_error(self, invalid_email):
+        with pytest.raises(ValidationError) as exc_info:
+            UserUpdate(email=invalid_email)
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == ("email",) and e["type"].startswith("value_error")
+            for e in errors
+        )
+
+    def test_create_instance_with_extra_fields_null_or_empty_should_raise_validation_error(self):
+        # Testar que campos extras com valor None ou vazio também causam erro
+        with pytest.raises(ValidationError) as exc_info:
+            UserUpdate(name="Valid Name", email="valid@example.com", is_vip=True, extra_field=None)
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == ("extra_field",) and e["type"] == "extra_forbidden"
+            for e in errors
+        )
+        with pytest.raises(ValidationError) as exc_info:
+            UserUpdate(name="Valid Name", email="valid@example.com", is_vip=True, extra_field="")
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == ("extra_field",) and e["type"] == "extra_forbidden"
+            for e in errors
+        )
+
+    def test_error_message_for_extra_fields_contains_field_name(self):
+        with pytest.raises(ValidationError) as exc_info:
+            UserUpdate(name="Valid Name", email="valid@example.com", is_vip=True, unexpected="value")
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == ("unexpected",) and "extra" in e["type"]
+            for e in errors
+        )
