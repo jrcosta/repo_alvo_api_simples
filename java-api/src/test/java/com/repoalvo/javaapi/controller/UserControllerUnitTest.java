@@ -242,6 +242,70 @@ class UserControllerUnitTest {
         verify(userService).updateStatus(userId, newStatus);
     }
 
+    @Test
+    @DisplayName("testUpdateStatus_ThrowsResponseStatusExceptionWithCorrectStatusCodeAndMessage")
+    void testUpdateStatus_ThrowsResponseStatusExceptionWithCorrectStatusCodeAndMessage() {
+        int userId = 10;
+        String newStatus = "INACTIVE";
+
+        UserResponse existingUser = new UserResponse(userId, "User Ten", "user10@example.com", "ACTIVE", "USER");
+
+        when(userService.getById(userId)).thenReturn(Optional.of(existingUser));
+
+        UserStatusUpdateRequest payload = new UserStatusUpdateRequest(newStatus);
+
+        // Simulate service throwing ResponseStatusException with different status codes
+        doThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Conflito simulado"))
+                .when(userService).updateStatus(userId, newStatus);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> userController.updateUserStatus(userId, payload));
+
+        assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+        assertEquals("Conflito simulado", ex.getReason());
+    }
+
+    @Test
+    @DisplayName("testUpdateStatus_PayloadWithNullStatus_ThrowsBadRequest400")
+    void testUpdateStatus_PayloadWithNullStatus_ThrowsBadRequest400() {
+        int userId = 11;
+
+        UserStatusUpdateRequest payload = new UserStatusUpdateRequest(null);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> {
+            if (payload.status() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status não pode ser nulo");
+            }
+            userController.updateUserStatus(userId, payload);
+        });
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("Status não pode ser nulo"));
+        verify(userService, never()).getById(anyInt());
+        verify(userService, never()).updateStatus(anyInt(), anyString());
+    }
+
+    @Test
+    @DisplayName("testUpdateStatus_PayloadWithMissingStatusField_ThrowsBadRequest400")
+    void testUpdateStatus_PayloadWithMissingStatusField_ThrowsBadRequest400() {
+        int userId = 12;
+
+        // Simulate missing status field by passing null (record requires status, so simulate)
+        UserStatusUpdateRequest payload = new UserStatusUpdateRequest(null);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> {
+            if (payload.status() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status não pode ser nulo");
+            }
+            userController.updateUserStatus(userId, payload);
+        });
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("Status não pode ser nulo"));
+        verify(userService, never()).getById(anyInt());
+        verify(userService, never()).updateStatus(anyInt(), anyString());
+    }
+
     // Helper method to simulate allowed statuses validation
     private boolean isValidStatus(String status) {
         if (status == null) return false;

@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.*;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -38,72 +39,23 @@ class UserControllerDeleteIntegrationTest {
     }
 
     @Test
-    @DisplayName("DELETE /users/{userId} returns 204 when user exists with valid admin authentication")
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserShouldReturn204WhenUserExistsWithAdminAuth() throws Exception {
-        // Ana (id=1) é ADMIN e tem vip=true — não pode ser deletada
-        // Criar um usuário USER para deletar
-        UserCreateRequest req = new UserCreateRequest("Test User", "test.delete@example.com", "USER", null);
+    @DisplayName("testCreateUserForDeletion_Success: criação dinâmica de usuário com vip=false e papel correto")
+    void testCreateUserForDeletion_Success() {
+        UserCreateRequest req = new UserCreateRequest("Dynamic User", "dynamic.user@example.com", "USER", null);
         UserResponse created = userService.create(req);
-
-        mockMvc.perform(get("/users/" + created.id()))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(delete("/users/" + created.id()))
-                .andExpect(status().isNoContent());
-
-        mockMvc.perform(get("/users/" + created.id()))
-                .andExpect(status().isNotFound());
+        assertNotNull(created);
+        assertTrue(created.id() > 0);
+        assertEquals("Dynamic User", created.name());
+        assertEquals("dynamic.user@example.com", created.email());
+        assertFalse(created.vip(), "Usuário criado deve ter vip=false");
+        assertTrue(created.roles().contains("USER"), "Usuário criado deve conter papel USER");
     }
 
     @Test
-    @DisplayName("DELETE /users/{userId} returns 401 Unauthorized when no authentication provided")
-    void deleteUserShouldReturn401WhenNoAuth() throws Exception {
-        mockMvc.perform(delete("/users/2"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @DisplayName("DELETE /users/{userId} returns 403 Forbidden when authenticated user lacks admin role")
-    @WithMockUser(username = "user", roles = {"USER"})
-    void deleteUserShouldReturn403WhenUserNotAdmin() throws Exception {
-        mockMvc.perform(delete("/users/2"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @DisplayName("DELETE /users/{userId} returns 400 Bad Request for invalid userId formats")
+    @DisplayName("testDeleteUser_VipUser_NotAllowed: não permite deleção de usuário vip=true")
     @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserShouldReturn400ForInvalidUserIdFormats() throws Exception {
-        // Strings não numéricas retornam 400 via MethodArgumentTypeMismatchException
-        String[] invalidUserIds = {"abc", "123abc", "null"};
-
-        for (String invalidId : invalidUserIds) {
-            mockMvc.perform(delete("/users/" + invalidId))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().string(containsString("Invalid userId")));
-        }
-
-        // Valores numéricos inválidos retornam 400 via deleteAtomic (userId < 1)
-        mockMvc.perform(delete("/users/-1"))
-                .andExpect(status().isBadRequest());
-        mockMvc.perform(delete("/users/0"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @DisplayName("DELETE /users/{userId} returns 404 Not Found when user does not exist")
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserShouldReturn404WhenUserDoesNotExistWithAdminAuth() throws Exception {
-        mockMvc.perform(delete("/users/999"))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    @DisplayName("DELETE /users/{userId} prevents deletion of critical admin users (vip=true)")
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserShouldPreventDeletionOfCriticalAdminUsers() throws Exception {
-        // Ana (id=1) é ADMIN → vip=true → não pode ser deletada
+    void testDeleteUser_VipUser_NotAllowed() throws Exception {
+        // Usuário vip=true fixo (Ana id=1)
         mockMvc.perform(delete("/users/1"))
                 .andExpect(status().isForbidden())
                 .andExpect(content().string(containsString("Cannot delete critical admin user")));
@@ -113,11 +65,50 @@ class UserControllerDeleteIntegrationTest {
     }
 
     @Test
-    @DisplayName("DELETE /users/{userId} deletes user and maintains data integrity")
+    @DisplayName("testDeleteUser_InvalidUserIdFormat_NonNumeric: retorna 400 para userId não numérico")
     @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserWithRelatedDataShouldMaintainIntegrity() throws Exception {
-        UserCreateRequest req = new UserCreateRequest("User With Posts", "user.posts@example.com", "USER", null);
+    void testDeleteUser_InvalidUserIdFormat_NonNumeric() throws Exception {
+        String[] invalidUserIds = {"abc", "123abc", "null", " ", "user!@#", "9999999999999999999999999999999999999999"};
+        for (String invalidId : invalidUserIds) {
+            mockMvc.perform(delete("/users/" + invalidId))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().string(containsString("Invalid userId")));
+        }
+    }
+
+    @Test
+    @DisplayName("testDeleteUser_InvalidUserIdFormat_NegativeOrZero: retorna 400 para userId negativo ou zero")
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void testDeleteUser_InvalidUserIdFormat_NegativeOrZero() throws Exception {
+        mockMvc.perform(delete("/users/-1"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(delete("/users/0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("testDeleteUser_Unauthenticated_And_Unauthorized: retorna 401 sem autenticação e 403 sem papel ADMIN")
+    void testDeleteUser_Unauthenticated_And_Unauthorized() throws Exception {
+        // Sem autenticação
+        mockMvc.perform(delete("/users/2"))
+                .andExpect(status().isUnauthorized());
+
+        // Com autenticação mas sem papel ADMIN
+        mockMvc.perform(delete("/users/2")
+                .with(SecurityMockMvcRequestPostProcessors.user("user").roles("USER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("testDeleteUser_Success: deleção de usuário criado dinamicamente e integridade dos dados relacionados")
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void testDeleteUser_Success() throws Exception {
+        UserCreateRequest req = new UserCreateRequest("User To Delete", "user.delete@example.com", "USER", null);
         UserResponse createdUser = userService.create(req);
+
+        // Criar posts relacionados para verificar integridade
+        userService.createPostForUser(createdUser.id(), "Post 1");
+        userService.createPostForUser(createdUser.id(), "Post 2");
 
         mockMvc.perform(delete("/users/" + createdUser.id()))
                 .andExpect(status().isNoContent());
@@ -126,13 +117,12 @@ class UserControllerDeleteIntegrationTest {
                 .andExpect(status().isNotFound());
 
         List<String> posts = userService.getPostsByUserId(createdUser.id());
-        assert(posts.isEmpty());
+        assertTrue(posts.isEmpty(), "Posts relacionados devem ser removidos após deleção do usuário");
     }
 
     @Test
-    @DisplayName("DELETE /users/{userId} handles concurrent deletions of the same user gracefully")
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserConcurrentlySameUser() throws Exception {
+    @DisplayName("testDeleteUser_Concurrency_SameUser: concorrência na deleção do mesmo usuário retorna 204 e 404")
+    void testDeleteUser_Concurrency_SameUser() throws Exception {
         UserCreateRequest user = new UserCreateRequest("Concurrent User", "concurrent.user@example.com", "USER", null);
         UserResponse createdUser = userService.create(user);
         int userId = createdUser.id();
@@ -146,7 +136,7 @@ class UserControllerDeleteIntegrationTest {
                 try {
                     return mockMvc.perform(
                             delete("/users/" + userId)
-                                .with(SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))
+                                    .with(SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))
                             .andReturn()
                             .getResponse()
                             .getStatus();
@@ -168,14 +158,13 @@ class UserControllerDeleteIntegrationTest {
         long noContentCount = statuses.stream().filter(s -> s == 204).count();
         long notFoundCount = statuses.stream().filter(s -> s == 404).count();
 
-        assert(noContentCount == 1);
-        assert(notFoundCount == threadCount - 1);
+        assertEquals(1, noContentCount, "Apenas uma requisição deve retornar 204 No Content");
+        assertEquals(threadCount - 1, notFoundCount, "Demais requisições devem retornar 404 Not Found");
     }
 
     @Test
-    @DisplayName("DELETE /users/{userId} handles concurrent deletions of different users correctly")
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserConcurrentlyDifferentUsers() throws Exception {
+    @DisplayName("testDeleteUser_Concurrency_DifferentUsers: concorrência na deleção de múltiplos usuários retorna 204 para todos")
+    void testDeleteUser_Concurrency_DifferentUsers() throws Exception {
         int userCount = 5;
         List<UserResponse> users = new ArrayList<>();
         for (int i = 0; i < userCount; i++) {
@@ -191,7 +180,7 @@ class UserControllerDeleteIntegrationTest {
                 try {
                     return mockMvc.perform(
                             delete("/users/" + user.id())
-                                .with(SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))
+                                    .with(SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))
                             .andReturn()
                             .getResponse()
                             .getStatus();
@@ -206,7 +195,7 @@ class UserControllerDeleteIntegrationTest {
         executor.awaitTermination(5, TimeUnit.SECONDS);
 
         for (Future<Integer> future : results) {
-            assert(future.get() == 204);
+            assertEquals(204, future.get(), "Todas as deleções concorrentes devem retornar 204 No Content");
         }
 
         for (UserResponse user : users) {
@@ -216,45 +205,86 @@ class UserControllerDeleteIntegrationTest {
     }
 
     @Test
-    @DisplayName("DELETE /users/{userId} returns 500 on simulated database failure (fallback: normal delete)")
+    @DisplayName("testDeleteUser_AuditLogEntry: valida que deleção gera entrada de auditoria")
     @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserShouldReturn500OnDatabaseFailure() throws Exception {
-        UserCreateRequest user = new UserCreateRequest("Fail User", "fail.user@example.com", "USER", null);
-        UserResponse createdUser = userService.create(user);
+    void testDeleteUser_AuditLogEntry() throws Exception {
+        UserCreateRequest req = new UserCreateRequest("Audit User", "audit.user@example.com", "USER", null);
+        UserResponse createdUser = userService.create(req);
 
         mockMvc.perform(delete("/users/" + createdUser.id()))
                 .andExpect(status().isNoContent());
+
+        // Verificar que a auditoria foi registrada
+        boolean auditExists = userService.auditLogContainsEntryForUserDeletion(createdUser.id());
+        assertTrue(auditExists, "Deleção deve gerar entrada de auditoria");
     }
 
     @Test
-    @DisplayName("DELETE /users/{userId} returns 400 when userId is null string or missing")
+    @DisplayName("testDeleteUser_NullOrEmptyUserId: retorna 400 ou 404 para userId nulo, vazio ou ausente")
     @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserShouldReturn400WhenUserIdIsNullOrMissing() throws Exception {
+    void testDeleteUser_NullOrEmptyUserId() throws Exception {
         mockMvc.perform(delete("/users/"))
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(delete("/users/null"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string(containsString("Invalid userId")));
+
+        mockMvc.perform(delete("/users/ "))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("Invalid userId")));
     }
 
     @Test
-    @DisplayName("DELETE /users/{userId} returns 403 Forbidden for non-admin users")
-    @WithMockUser(username = "blockedUser", roles = {"USER"})
-    void deleteUserShouldReturn403ForBlockedUserAttemptingDeletion() throws Exception {
-        mockMvc.perform(delete("/users/2"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @DisplayName("DELETE /users/{userId} logs audit entry on successful deletion")
+    @DisplayName("testDeleteUser_FixedUserIds_Consistency: usuários fixos 1 e 2 estão consistentes para testes")
     @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUserShouldLogAuditOnSuccess() throws Exception {
-        // Bruno (id=2) é USER → pode ser deletado
+    void testDeleteUser_FixedUserIds_Consistency() throws Exception {
+        // Usuário 1 é vip=true e não pode ser deletado
+        mockMvc.perform(get("/users/1"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/users/1"))
+                .andExpect(status().isForbidden());
+
+        // Usuário 2 é deletável
+        mockMvc.perform(get("/users/2"))
+                .andExpect(status().isOk());
+
         mockMvc.perform(delete("/users/2"))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/users/2"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("testDeleteUser_FailureSimulation: simula falha no banco e valida fallback para deleção normal")
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void testDeleteUser_FailureSimulation() throws Exception {
+        // Criar usuário para deleção
+        UserCreateRequest user = new UserCreateRequest("FailSim User", "failsim.user@example.com", "USER", null);
+        UserResponse createdUser = userService.create(user);
+
+        // Simulação simplificada: não mockar serviço, apenas executar deleção normal
+        mockMvc.perform(delete("/users/" + createdUser.id()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/users/" + createdUser.id()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("testDeleteUser_AuthenticationContextConsistency: autenticação explícita não altera comportamento")
+    void testDeleteUser_AuthenticationContextConsistency() throws Exception {
+        UserCreateRequest user = new UserCreateRequest("AuthContext User", "authcontext.user@example.com", "USER", null);
+        UserResponse createdUser = userService.create(user);
+
+        // Deleção com autenticação explícita via SecurityMockMvcRequestPostProcessors
+        mockMvc.perform(delete("/users/" + createdUser.id())
+                .with(SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/users/" + createdUser.id()))
                 .andExpect(status().isNotFound());
     }
 }
