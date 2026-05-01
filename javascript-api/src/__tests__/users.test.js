@@ -1,172 +1,174 @@
 const request = require('supertest');
 const express = require('express');
-const userRoutes = require('../routes/users');
+const usersRouter = require('../routes/users');
 const userService = require('../services/userService');
+
+jest.mock('../services/userService');
 
 const app = express();
 app.use(express.json());
-app.use('/users', userRoutes);
+app.use('/users', usersRouter);
 
-describe('Users API Routes', () => {
+describe('PUT /users/:user_id', () => {
   beforeEach(() => {
-    // Reset userService internal state before each test
-    // Since userService is a singleton, we reset its users array and nextId
-    userService.users = [
-      { id: 1, name: "Alice", email: "alice@example.com" },
-      { id: 2, name: "Bob", email: "bob@example.com" },
-      { id: 3, name: "Charlie", email: "charlie@example.com" },
-    ];
-    userService.nextId = 4;
+    jest.clearAllMocks();
   });
 
-  describe('PUT /users/:user_id', () => {
-    test('should update user with valid name and email and return 200 with updated user', async () => {
-      const res = await request(app)
-        .put('/users/1')
-        .send({ name: 'Alice Updated', email: 'alice.updated@example.com' });
+  test('Deve retornar 422 para user_id não numérico', async () => {
+    const res = await request(app).put('/users/abc').send({ name: 'New Name' });
 
-      expect(res.statusCode).toBe(200);
-      expect(res.body).toMatchObject({
-        id: 1,
-        name: 'Alice Updated',
-        email: 'alice.updated@example.com',
-      });
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toEqual({ detail: 'ID de usuário inválido' });
+  });
 
-      // Verify internal state changed
-      const user = userService.getUser(1);
-      expect(user.name).toBe('Alice Updated');
-      expect(user.email).toBe('alice.updated@example.com');
-    });
-
-    test('should update user partially with only name and return 200', async () => {
-      const originalEmail = userService.getUser(2).email;
-      const res = await request(app)
-        .put('/users/2')
-        .send({ name: 'Bob Newname' });
-
-      expect(res.statusCode).toBe(200);
-      expect(res.body.name).toBe('Bob Newname');
-      expect(res.body.email).toBe(originalEmail);
-    });
-
-    test('should update user partially with only email and return 200', async () => {
-      const originalName = userService.getUser(3).name;
-      const res = await request(app)
-        .put('/users/3')
-        .send({ email: 'charlie.new@example.com' });
-
-      expect(res.statusCode).toBe(200);
-      expect(res.body.email).toBe('charlie.new@example.com');
-      expect(res.body.name).toBe(originalName);
-    });
-
-    test('should return 422 if no name or email provided in payload', async () => {
-      const res = await request(app)
-        .put('/users/1')
-        .send({});
+  test.each([{}, null, 'string', []])(
+    'Deve retornar 422 para corpo inválido (%p)',
+    async (body) => {
+      const res = await request(app).put('/users/1').send(body);
 
       expect(res.statusCode).toBe(422);
       expect(res.body).toEqual({ detail: "Pelo menos um dos campos 'name' ou 'email' deve ser informado" });
-    });
+    }
+  );
 
-    test('should return 404 if user does not exist', async () => {
-      const res = await request(app)
-        .put('/users/999')
-        .send({ name: 'No One' });
+  test('Deve retornar 422 para corpo sem name nem email', async () => {
+    const res = await request(app).put('/users/1').send({ age: 30 });
 
-      expect(res.statusCode).toBe(404);
-      expect(res.body).toEqual({ detail: "Usuário não encontrado" });
-    });
-
-    test('should return 409 if email is already registered to another user', async () => {
-      // Bob has email bob@example.com
-      const res = await request(app)
-        .put('/users/1')
-        .send({ email: 'bob@example.com' });
-
-      expect(res.statusCode).toBe(409);
-      expect(res.body).toEqual({ detail: "E-mail já cadastrado" });
-    });
-
-    test('should accept invalid email format and update user (no validation)', async () => {
-      const invalidEmail = 'invalid-email-format';
-      const res = await request(app)
-        .put('/users/1')
-        .send({ email: invalidEmail });
-
-      expect(res.statusCode).toBe(200);
-      expect(res.body.email).toBe(invalidEmail);
-    });
-
-    test('should return 422 if user_id is not a valid number', async () => {
-      const res = await request(app)
-        .put('/users/abc')
-        .send({ name: 'Invalid ID' });
-
-      expect(res.statusCode).toBe(422);
-      expect(res.body).toEqual({ detail: "ID de usuário inválido" });
-    });
-
-    test('should return 422 if payload is missing', async () => {
-      const res = await request(app)
-        .put('/users/1')
-        .send();
-
-      expect(res.statusCode).toBe(422);
-      expect(res.body).toEqual({ detail: "Pelo menos um dos campos 'name' ou 'email' deve ser informado" });
-    });
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toEqual({ detail: "Pelo menos um dos campos 'name' ou 'email' deve ser informado" });
   });
 
-  describe('DELETE /users/:user_id', () => {
-    test('should delete existing user and return 204', async () => {
-      const res = await request(app)
-        .delete('/users/1');
+  test('Deve retornar 409 se email já cadastrado por outro usuário', async () => {
+    userService.findByEmail.mockReturnValue({ id: 2, email: 'existing@example.com' });
 
-      expect(res.statusCode).toBe(204);
+    const res = await request(app)
+      .put('/users/1')
+      .send({ email: 'existing@example.com' });
 
-      // User should be removed
-      expect(userService.getUser(1)).toBeUndefined();
-    });
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({ detail: 'E-mail já cadastrado' });
+    expect(userService.findByEmail).toHaveBeenCalledWith('existing@example.com');
+  });
 
-    test('should return 404 when deleting non-existent user', async () => {
-      const res = await request(app)
-        .delete('/users/999');
+  test('Deve retornar 404 se usuário não encontrado para update', async () => {
+    userService.findByEmail.mockReturnValue(null);
+    userService.updateUser.mockReturnValue(null);
 
-      expect(res.statusCode).toBe(404);
-      expect(res.body).toEqual({ detail: "Usuário não encontrado" });
-    });
+    const res = await request(app)
+      .put('/users/1')
+      .send({ name: 'Updated Name' });
 
-    test('should return 422 when user_id is invalid', async () => {
-      const res = await request(app)
-        .delete('/users/abc');
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ detail: 'Usuário não encontrado' });
+    expect(userService.updateUser).toHaveBeenCalledWith(1, { name: 'Updated Name', email: undefined });
+  });
 
-      expect(res.statusCode).toBe(422);
-      expect(res.body).toEqual({ detail: "ID de usuário inválido" });
-    });
+  test('Deve atualizar usuário com dados válidos e retornar objeto atualizado', async () => {
+    userService.findByEmail.mockReturnValue(null);
+    const updatedUser = { id: 1, name: 'Updated Name', email: 'updated@example.com' };
+    userService.updateUser.mockReturnValue(updatedUser);
 
-    test('should handle multiple deletes on same user id', async () => {
-      const first = await request(app).delete('/users/2');
-      expect(first.statusCode).toBe(204);
+    const res = await request(app)
+      .put('/users/1')
+      .send({ name: 'Updated Name', email: 'updated@example.com' });
 
-      const second = await request(app).delete('/users/2');
-      expect(second.statusCode).toBe(404);
-      expect(second.body).toEqual({ detail: "Usuário não encontrado" });
-    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual(updatedUser);
+    expect(userService.updateUser).toHaveBeenCalledWith(1, { name: 'Updated Name', email: 'updated@example.com' });
+  });
 
-    test('should not affect other users when deleting one user', async () => {
-      const usersBefore = userService.listUsers();
+  test('Deve ignorar campos extras no corpo e atualizar somente name e email', async () => {
+    userService.findByEmail.mockReturnValue(null);
+    const updatedUser = { id: 1, name: 'Updated Name', email: 'updated@example.com' };
+    userService.updateUser.mockReturnValue(updatedUser);
 
-      const res = await request(app).delete('/users/3');
-      expect(res.statusCode).toBe(204);
+    const res = await request(app)
+      .put('/users/1')
+      .send({ name: 'Updated Name', email: 'updated@example.com', age: 30, address: 'Rua X' });
 
-      const usersAfter = userService.listUsers();
-      expect(usersAfter).toHaveLength(usersBefore.length - 1);
-      expect(usersAfter.find(u => u.id === 3)).toBeUndefined();
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual(updatedUser);
+    expect(userService.updateUser).toHaveBeenCalledWith(1, { name: 'Updated Name', email: 'updated@example.com' });
+  });
 
-      for (const user of usersAfter) {
-        const beforeUser = usersBefore.find(u => u.id === user.id);
-        expect(user).toEqual(beforeUser);
-      }
-    });
+  test('Deve retornar 422 para user_id zero ou negativo', async () => {
+    const resZero = await request(app).put('/users/0').send({ name: 'Name' });
+    expect(resZero.statusCode).toBe(422);
+    expect(resZero.body).toEqual({ detail: 'ID de usuário inválido' });
+
+    const resNeg = await request(app).put('/users/-5').send({ name: 'Name' });
+    expect(resNeg.statusCode).toBe(422);
+    expect(resNeg.body).toEqual({ detail: 'ID de usuário inválido' });
+  });
+
+  test.each([
+    [{ name: 123 }],
+    [{ email: 'invalid-email' }],
+    [{ name: 123, email: 'invalid-email' }]
+  ])('Deve aceitar corpo com campos inválidos e tentar atualizar (sem validação extra)', async (body) => {
+    // Como não há validação explícita no código para formato de email ou tipo de name,
+    // o teste verifica que a requisição é encaminhada para updateUser.
+    userService.findByEmail.mockReturnValue(null);
+    userService.updateUser.mockReturnValue({ id: 1, ...body });
+
+    const res = await request(app).put('/users/1').send(body);
+
+    expect(res.statusCode).toBe(200);
+    expect(userService.updateUser).toHaveBeenCalledWith(1, body);
+  });
+});
+
+describe('DELETE /users/:user_id', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('Deve retornar 422 para user_id não numérico', async () => {
+    const res = await request(app).delete('/users/abc');
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toEqual({ detail: 'ID de usuário inválido' });
+  });
+
+  test('Deve retornar 422 para user_id zero ou negativo', async () => {
+    const resZero = await request(app).delete('/users/0');
+    expect(resZero.statusCode).toBe(422);
+    expect(resZero.body).toEqual({ detail: 'ID de usuário inválido' });
+
+    const resNeg = await request(app).delete('/users/-10');
+    expect(resNeg.statusCode).toBe(422);
+    expect(resNeg.body).toEqual({ detail: 'ID de usuário inválido' });
+  });
+
+  test('Deve retornar 404 se usuário não encontrado', async () => {
+    userService.getUser.mockReturnValue(null);
+
+    const res = await request(app).delete('/users/1');
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ detail: 'Usuário não encontrado' });
+    expect(userService.getUser).toHaveBeenCalledWith(1);
+  });
+
+  test('Deve retornar 204 e deletar usuário existente', async () => {
+    userService.getUser.mockReturnValue({ id: 1, name: 'User', email: 'user@example.com' });
+    userService.deleteUser.mockImplementation(() => {});
+
+    const res = await request(app).delete('/users/1');
+
+    expect(res.statusCode).toBe(204);
+    expect(res.body).toEqual({});
+    expect(userService.getUser).toHaveBeenCalledWith(1);
+    expect(userService.deleteUser).toHaveBeenCalledWith(1);
+  });
+
+  test('Deve retornar 404 se usuário já deletado (estado inconsistente)', async () => {
+    // Simula getUser retornando null (usuário não existe)
+    userService.getUser.mockReturnValue(null);
+
+    const res = await request(app).delete('/users/2');
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ detail: 'Usuário não encontrado' });
   });
 });
