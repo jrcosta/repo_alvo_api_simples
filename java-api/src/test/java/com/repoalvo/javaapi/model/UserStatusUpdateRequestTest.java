@@ -2,6 +2,7 @@ package com.repoalvo.javaapi.model;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Locale;
 import java.util.Set;
 
 import jakarta.validation.ConstraintViolation;
@@ -88,7 +89,7 @@ public class UserStatusUpdateRequestTest {
 
     @Test
     void shouldFailValidationWithMultipleViolationsEmptyAndInvalid() {
-        // Empty string triggers @NotBlank and @Pattern violations
+        // Empty string triggers @NotBlank and possibly @Pattern violations
         UserStatusUpdateRequest req = new UserStatusUpdateRequest("");
         Set<ConstraintViolation<UserStatusUpdateRequest>> violations = validator.validate(req);
         assertFalse(violations.isEmpty());
@@ -123,11 +124,34 @@ public class UserStatusUpdateRequestTest {
     }
 
     @Test
-    void shouldFailDeserializationWhenStatusMissing() {
+    void shouldFailDeserializationWhenStatusMissing() throws Exception {
         String json = "{}";
         UserStatusUpdateRequest req = objectMapper.readValue(json, UserStatusUpdateRequest.class);
         Set<ConstraintViolation<UserStatusUpdateRequest>> violations = validator.validate(req);
         assertFalse(violations.isEmpty());
         assertTrue(violations.stream().anyMatch(v -> v.getMessage().equals("O campo 'status' é obrigatório")));
+    }
+
+    @Test
+    void shouldFailValidationWhenStatusIsNullExplicitly() {
+        // Explicitly test null value triggers validation error
+        UserStatusUpdateRequest req = new UserStatusUpdateRequest(null);
+        Set<ConstraintViolation<UserStatusUpdateRequest>> violations = validator.validate(req);
+        assertFalse(violations.isEmpty());
+        assertTrue(violations.stream().anyMatch(v -> v.getMessage().equals("O campo 'status' é obrigatório")));
+    }
+
+    @Test
+    void shouldValidateMessagesInPortugueseLocale() {
+        Locale defaultLocale = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("pt", "BR"));
+            UserStatusUpdateRequest req = new UserStatusUpdateRequest("");
+            Set<ConstraintViolation<UserStatusUpdateRequest>> violations = validator.validate(req);
+            assertFalse(violations.isEmpty());
+            assertTrue(violations.stream().anyMatch(v -> v.getMessage().equals("O campo 'status' é obrigatório")));
+        } finally {
+            Locale.setDefault(defaultLocale);
+        }
     }
 }
