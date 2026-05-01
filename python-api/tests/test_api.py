@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.api import routes
 from app.services.user_service import user_service
 
 client = TestClient(app)
@@ -138,8 +139,6 @@ def test_api_update_user_returns_404_for_nonexistent_user_with_valid_payload():
 
 
 def test_api_update_user_returns_404_when_service_returns_none(monkeypatch):
-    from app.api import routes
-
     def fake_update_user(user_id, payload):
         return None
 
@@ -200,8 +199,6 @@ def test_api_update_user_returns_422_for_null_values_in_valid_fields():
 
 
 def test_api_update_user_monkeypatch_does_not_affect_other_tests(monkeypatch):
-    from app.api import routes
-
     original_update_user = routes.user_service.update_user
 
     def fake_update_user(user_id, payload):
