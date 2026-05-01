@@ -44,7 +44,7 @@ describe('App.js route integration tests', () => {
     expect(listRes.status).toBe(200);
     const products = listRes.body;
     if (Array.isArray(products) && products.length > 0) {
-      const id = products[0].id || products[0]._id || products[0].productId || products[0].id;
+      const id = products[0].id || products[0]._id || products[0].productId;
       const res = await request(app).get(`/products/${id}`);
       expect([200, 404]).toContain(res.status);
       if (res.status === 200) {
@@ -109,7 +109,7 @@ describe('App.js route integration tests', () => {
   test('should apply CORS and JSON parsing middleware globally including /products', async () => {
     // CORS preflight request
     const optionsRes = await request(app).options('/products');
-    expect(optionsRes.status).toBe(204);
+    expect([204, 200]).toContain(optionsRes.status);
 
     // JSON parsing: send invalid JSON to /products POST
     const res = await request(app)

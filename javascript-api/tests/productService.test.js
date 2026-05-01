@@ -148,7 +148,7 @@ describe('ProductService Unit Tests', () => {
     expect(p2.id).toBe(5);
   });
 
-  test('createProduct accepts payloads with extra unexpected fields without removing them', () => {
+  test('createProduct accepts payloads with extra unexpected fields without storing them', () => {
     const payload = { name: 'Produto Extra', price: 100, stock: 10, extraField: 'extra' };
     const created = productService.createProduct(payload);
     expect(created).toMatchObject({
@@ -159,6 +159,18 @@ describe('ProductService Unit Tests', () => {
     });
     // Extra fields are not stored in the product object
     expect(created.extraField).toBeUndefined();
+  });
+
+  test('updateProduct accepts payloads with extra unexpected fields without storing them', () => {
+    const original = productService.getProduct(1);
+    const updated = productService.updateProduct(1, { name: 'Novo Nome', extraField: 'extra' });
+    expect(updated).toMatchObject({
+      id: 1,
+      name: 'Novo Nome',
+      price: original.price,
+      stock: original.stock,
+    });
+    expect(updated.extraField).toBeUndefined();
   });
 
   test('updateProduct does not alter products array when updating non-existing product', () => {
@@ -202,5 +214,66 @@ describe('ProductService Unit Tests', () => {
     const finalProduct = productService.getProduct(1);
     expect(finalProduct.price).toBe(100);
     expect(finalProduct.stock).toBe(50);
+  });
+
+  // Additional tests for concurrency simulation and integration with route validation
+
+  test('simulate concurrent creation of products sequentially to check ID increment', () => {
+    const creations = [];
+    for (let i = 0; i < 10; i++) {
+      creations.push(productService.createProduct({ name: `Produto Concorrente ${i}`, price: i * 10 }));
+    }
+    for (let i = 0; i < creations.length - 1; i++) {
+      expect(creations[i + 1].id).toBe(creations[i].id + 1);
+    }
+  });
+
+  test('simulate multiple sequential deletions to ensure internal state consistency', () => {
+    productService.createProduct({ name: 'Produto Y', price: 100 });
+    productService.createProduct({ name: 'Produto Z', price: 200 });
+    const initialCount = productService.listProducts().length;
+    const idsToDelete = [1, 2, 3];
+    idsToDelete.forEach(id => {
+      const deleted = productService.deleteProduct(id);
+      expect(deleted).toBe(true);
+    });
+    const products = productService.listProducts();
+    expect(products.length).toBe(initialCount - idsToDelete.length);
+    idsToDelete.forEach(id => {
+      expect(products.find(p => p.id === id)).toBeUndefined();
+    });
+  });
+
+  test('createProduct handles numeric edge cases correctly', () => {
+    const zeroPrice = productService.createProduct({ name: 'Zero Price', price: 0, stock: 10 });
+    expect(zeroPrice.price).toBe(0);
+    const zeroStock = productService.createProduct({ name: 'Zero Stock', price: 100, stock: 0 });
+    expect(zeroStock.stock).toBe(0);
+    const largeValues = productService.createProduct({ name: 'Large Values', price: 1e9, stock: 1e6 });
+    expect(largeValues.price).toBe(1e9);
+    expect(largeValues.stock).toBe(1e6);
+  });
+
+  test('updateProduct handles numeric edge cases correctly', () => {
+    const updatedZeroPrice = productService.updateProduct(1, { price: 0 });
+    expect(updatedZeroPrice.price).toBe(0);
+    const updatedZeroStock = productService.updateProduct(1, { stock: 0 });
+    expect(updatedZeroStock.stock).toBe(0);
+    const updatedLargeValues = productService.updateProduct(1, { price: 1e9, stock: 1e6 });
+    expect(updatedLargeValues.price).toBe(1e9);
+    expect(updatedLargeValues.stock).toBe(1e6);
+  });
+
+  // Integration test simulation: validate that service does not validate data internally
+  test('service accepts invalid data from route layer (simulated)', () => {
+    // Simulate route layer validation failure by passing invalid data directly
+    const invalidPayload = { name: '', price: -10, stock: -1 };
+    const created = productService.createProduct(invalidPayload);
+    expect(created).toMatchObject({
+      name: '',
+      price: -10,
+      stock: -1,
+    });
+    // This confirms service does not validate internally
   });
 });
