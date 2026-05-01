@@ -150,4 +150,36 @@ router.get('/', (req, res) => {
   return res.json(users);
 });
 
+router.put('/:user_id', (req, res) => {
+  const userId = parseInt(req.params.user_id, 10);
+  const { name, email } = req.body;
+
+  if (!name && !email) {
+    return res.status(422).json({ detail: 'Informe ao menos um campo para atualizar' });
+  }
+
+  if (email) {
+    const existing = userService.findByEmail(email);
+    if (existing && existing.id !== userId) {
+      return res.status(409).json({ detail: 'E-mail já cadastrado por outro usuário' });
+    }
+  }
+
+  const updated = userService.updateUser(userId, { name, email });
+  if (!updated) {
+    return res.status(404).json({ detail: 'Usuário não encontrado' });
+  }
+  return res.json(updated);
+});
+
+router.delete('/:user_id', (req, res) => {
+  const userId = parseInt(req.params.user_id, 10);
+  const user = userService.getUser(userId);
+  if (!user) {
+    return res.status(404).json({ detail: 'Usuário não encontrado' });
+  }
+  userService.deleteUser(userId);
+  return res.status(204).send();
+});
+
 module.exports = router;
