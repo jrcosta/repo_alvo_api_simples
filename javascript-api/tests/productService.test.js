@@ -33,7 +33,7 @@ describe('ProductService Unit Tests', () => {
       expect(results[0].id).toBe(2);
       expect(results[0].category).toBe('perifericos');
       expect(results[0].name.toLowerCase()).toContain('mouse');
-      expect(results[0].effectivePrice).toBeCloseTo(74.95);
+      expect(results[0].effectivePrice).toBeCloseTo(74.95, 2);
       expect(results[0].stock).toBeGreaterThan(0);
     });
 

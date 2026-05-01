@@ -276,7 +276,7 @@ describe('Products API Routes', () => {
     expect(res.body).toEqual({ detail: 'Produto não encontrado ou sem desconto ativo' });
   });
 
-  // DELETE /products/:id/discount with invalid id
+  // DELETE /products/:id/discount with non-existent id
   test('testDeleteDiscount_withNonExistentId_shouldReturn404', async () => {
     productService.removeDiscount.mockReturnValue(false);
 
