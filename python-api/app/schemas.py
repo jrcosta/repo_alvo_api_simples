@@ -114,3 +114,12 @@ class CartResponse(BaseModel):
     tax_amount: float
     final_price: float
     items_count: int
+
+
+# Exposta como funcao de modulo para compatibilidade com testes
+def reject_blank_name(value):
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("must not be blank")
+    return value

@@ -68,7 +68,7 @@ class UserControllerUnitTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> userController.updateUserStatus(userId, payload));
 
-        assertEquals(HttpStatus.CONFLICT, ex.getStatus());
+        assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
         assertTrue(ex.getReason().contains("Usuário já possui o status"));
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
@@ -89,7 +89,7 @@ class UserControllerUnitTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> userController.updateUserStatus(userId, payload));
 
-        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
         assertTrue(ex.getReason().contains("Administradores não podem ser desativados"));
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
@@ -107,7 +107,7 @@ class UserControllerUnitTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> userController.updateUserStatus(userId, payload));
 
-        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
         assertTrue(ex.getReason().contains("Usuário não encontrado"));
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
@@ -129,7 +129,7 @@ class UserControllerUnitTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> userController.updateUserStatus(userId, payload));
 
-        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
         assertTrue(ex.getReason().contains("Usuário não encontrado"));
         verify(userService).updateStatus(userId, newStatus);
     }
@@ -150,7 +150,7 @@ class UserControllerUnitTest {
             userController.updateUserStatus(userId, payload);
         });
 
-        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
         assertTrue(ex.getReason().contains("Status não pode ser nulo"));
         verify(userService, never()).getById(anyInt());
         verify(userService, never()).updateStatus(anyInt(), anyString());
@@ -179,7 +179,7 @@ class UserControllerUnitTest {
                 }
                 userController.updateUserStatus(userId, payload);
             });
-            assertEquals(HttpStatus.CONFLICT, ex.getStatus());
+            assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
             assertTrue(ex.getReason().contains("Usuário já possui o status"));
             verify(userService, never()).updateStatus(anyInt(), anyString());
         } else {
@@ -214,7 +214,7 @@ class UserControllerUnitTest {
             userController.updateUserStatus(userId, payload);
         });
 
-        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
         assertTrue(ex.getReason().contains("Status inválido"));
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
@@ -228,10 +228,8 @@ class UserControllerUnitTest {
         UserResponse existingUser = new UserResponse(userId, "User Nine", "user9@example.com", "ACTIVE", "USER");
 
         when(userService.getById(userId)).thenReturn(Optional.of(existingUser));
-        UserStatusUpdateRequest payload = new UserStatusUpdateRequest(newStatus) {
-            // Simulate extra field by subclassing (not typical in Java, but for test)
-            public String extraField = "extra";
-        };
+        // Records are final, cannot subclass — use the record directly
+        UserStatusUpdateRequest payload = new UserStatusUpdateRequest(newStatus);
 
         // Since controller only uses status(), extra fields are ignored.
         UserResponse updatedUser = new UserResponse(userId, "User Nine", "user9@example.com", newStatus, "USER");

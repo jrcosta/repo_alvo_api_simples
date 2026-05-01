@@ -102,6 +102,7 @@ public class UserController {
     @GetMapping("/users/by-email")
     public UserResponse getUserByEmail(@RequestParam String email) {
         return userService.findByEmail(email)
+                .filter(u -> "ACTIVE".equalsIgnoreCase(u.status()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
     }
 
@@ -205,9 +206,14 @@ public class UserController {
     @DeleteMapping("/users/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteUser(@PathVariable int userId) {
-        if (userService.getById(userId).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado");
+        if (userId < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid userId");
         }
-        userService.delete(userId);
+        try {
+            userService.deleteAtomic(userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        }
     }
 }

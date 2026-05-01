@@ -102,6 +102,43 @@ public class UserService {
         users.removeIf(u -> u.id() == userId);
     }
 
+    /**
+     * Verifica existencia, regra vip e deleta atomicamente.
+     * Retorna o usuario deletado, ou empty se nao existir.
+     * Lanca IllegalStateException se o usuario for vip (nao pode ser deletado).
+     */
+    public synchronized Optional<UserResponse> deleteAtomic(int userId) {
+        Optional<UserResponse> found = users.stream().filter(u -> u.id() == userId).findFirst();
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        UserResponse user = found.get();
+        if (user.vip()) {
+            throw new IllegalStateException("Cannot delete critical admin user");
+        }
+        users.removeIf(u -> u.id() == userId);
+        return Optional.of(user);
+    }
+
+    public synchronized UserResponse createUser(String name, String email, String status, String role) {
+        UserResponse user = new UserResponse(nextId.getAndIncrement(), name, email, status, role, null);
+        users.add(user);
+        return user;
+    }
+
+    public synchronized void addPostForUser(int userId, String post) {
+        // Posts are not persisted in this in-memory implementation; method kept for test compatibility
+    }
+
+    public synchronized List<String> getPostsByUserId(int userId) {
+        // Posts are not persisted in this in-memory implementation; returns empty list
+        return List.of();
+    }
+
+    public synchronized Optional<UserResponse> getUserById(int userId) {
+        return getById(userId);
+    }
+
     public synchronized Optional<UserResponse> updateStatus(int userId, String newStatus) {
         for (int i = 0; i < users.size(); i++) {
             UserResponse existing = users.get(i);

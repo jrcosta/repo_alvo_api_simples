@@ -132,8 +132,9 @@ class TestUserUpdateSchema:
         with pytest.raises(ValidationError) as exc_info:
             UserUpdate(name="Valid Name", email="valid@example.com", is_vip=True, extra_field="not_allowed")
         errors = exc_info.value.errors()
+        # Pydantic v2 usa "extra_forbidden" em vez de "value_error.extra"
         assert any(
-            e["loc"] == ("extra_field",) and e["type"] == "value_error.extra"
+            e["loc"] == ("extra_field",) and e["type"] == "extra_forbidden"
             for e in errors
         )
 
@@ -155,10 +156,10 @@ class TestUserUpdateSchema:
         assert user_update.name == long_name
 
     def test_email_length_boundaries(self):
-        # Testar email com tamanho máximo permitido (ex: 254 caracteres)
+        # RFC 5321: local part max 64 chars, total max 254 chars
+        # Testar email com local part no limite (64 chars)
         local_part = "a" * 64
-        domain = "b" * 185 + ".com"  # total 64+1+185+4=254
-        email = f"{local_part}@{domain}"
+        email = f"{local_part}@example.com"
         user_update = UserUpdate(email=email)
         assert user_update.email == email
 

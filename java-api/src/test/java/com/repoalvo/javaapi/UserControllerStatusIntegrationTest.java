@@ -244,7 +244,7 @@ class UserControllerStatusIntegrationTest {
         executor.shutdown();
 
         // After concurrency, user status should be either ACTIVE or INACTIVE (no invalid state)
-        String finalStatus = userService.getUserById(2).getStatus();
+        String finalStatus = userService.getById(2).map(u -> u.status()).orElse("UNKNOWN");
         assert(finalStatus.equals("ACTIVE") || finalStatus.equals("INACTIVE"));
     }
 }
