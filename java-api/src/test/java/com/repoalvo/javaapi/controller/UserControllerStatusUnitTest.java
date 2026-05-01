@@ -86,7 +86,9 @@ public class UserControllerStatusUnitTest {
             mockMvc.perform(patch("/users/{id}/status", invalidId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(new UserStatusUpdateRequest("ACTIVE"))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists())
+                .andExpect(jsonPath("$.message").exists());
         }
     }
 
@@ -223,7 +225,9 @@ public class UserControllerStatusUnitTest {
             mockMvc.perform(patch("/users/{id}/status", userId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(String.format("{\"status\":\"%s\"}", status)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists())
+                .andExpect(jsonPath("$.message").exists());
         }
     }
 
@@ -282,5 +286,62 @@ public class UserControllerStatusUnitTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(new UserStatusUpdateRequest("ACTIVE"))))
             .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void testPatchUserStatusSupportsPatchMethod() throws Exception {
+        int userId = 30;
+        UserResponse existing = new UserResponse(userId, "Grace", "grace@example.com", "INACTIVE", "USER");
+        UserResponse updated = new UserResponse(userId, "Grace", "grace@example.com", "ACTIVE", "USER");
+
+        when(userService.getById(userId)).thenReturn(Optional.of(existing));
+        when(userService.updateStatus(userId, "ACTIVE")).thenReturn(Optional.of(updated));
+
+        mockMvc.perform(patch("/users/{id}/status", userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new UserStatusUpdateRequest("ACTIVE"))))
+            .andExpect(status().isOk());
+
+        verify(userService, times(1)).updateStatus(userId, "ACTIVE");
+    }
+
+    @Test
+    void testPatchUserStatusWithPayloadExtraFieldsRejectedOrIgnored() throws Exception {
+        int userId = 40;
+        String payloadWithExtraFields = "{\"status\":\"ACTIVE\", \"unexpectedField\":\"value\"}";
+
+        UserResponse existing = new UserResponse(userId, "Hank", "hank@example.com", "INACTIVE", "USER");
+        UserResponse updated = new UserResponse(userId, "Hank", "hank@example.com", "ACTIVE", "USER");
+
+        when(userService.getById(userId)).thenReturn(Optional.of(existing));
+        when(userService.updateStatus(userId, "ACTIVE")).thenReturn(Optional.of(updated));
+
+        // Assuming controller ignores extra fields and processes normally
+        mockMvc.perform(patch("/users/{id}/status", userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payloadWithExtraFields))
+            .andExpect(status().isOk());
+
+        verify(userService, times(1)).updateStatus(userId, "ACTIVE");
+    }
+
+    @Test
+    void testPatchUserStatusWithPayloadExtraNestedFieldsRejectedOrIgnored() throws Exception {
+        int userId = 41;
+        String payloadWithNestedExtra = "{\"status\":\"INACTIVE\", \"extraNested\":{\"field\":\"value\"}}";
+
+        UserResponse existing = new UserResponse(userId, "Ivy", "ivy@example.com", "ACTIVE", "USER");
+        UserResponse updated = new UserResponse(userId, "Ivy", "ivy@example.com", "INACTIVE", "USER");
+
+        when(userService.getById(userId)).thenReturn(Optional.of(existing));
+        when(userService.updateStatus(userId, "INACTIVE")).thenReturn(Optional.of(updated));
+
+        // Assuming controller ignores nested extra fields and processes normally
+        mockMvc.perform(patch("/users/{id}/status", userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payloadWithNestedExtra))
+            .andExpect(status().isOk());
+
+        verify(userService, times(1)).updateStatus(userId, "INACTIVE");
     }
 }

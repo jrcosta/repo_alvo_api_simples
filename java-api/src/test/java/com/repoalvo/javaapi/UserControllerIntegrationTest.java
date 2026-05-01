@@ -197,12 +197,13 @@ class UserControllerIntegrationTest {
     @DisplayName("Simulate failure in userService.reset() and verify exception is propagated")
     void simulateResetFailureShouldThrowException() {
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> {
-            new UserService() {
+            UserService failingService = new UserService() {
                 @Override
                 public synchronized void reset() {
                     throw new RuntimeException("Simulated reset failure");
                 }
             };
+            failingService.reset();
         });
         assertEquals("Simulated reset failure", thrown.getMessage());
     }
@@ -211,7 +212,7 @@ class UserControllerIntegrationTest {
     @DisplayName("Simulate reset() failure with checked exception and verify handling")
     void simulateResetFailureWithCheckedExceptionShouldThrowRuntimeException() {
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> {
-            new UserService() {
+            UserService failingService = new UserService() {
                 @Override
                 public synchronized void reset() {
                     try {
@@ -221,6 +222,7 @@ class UserControllerIntegrationTest {
                     }
                 }
             };
+            failingService.reset();
         });
         assertEquals("java.lang.Exception: Checked exception in reset", thrown.getMessage());
     }

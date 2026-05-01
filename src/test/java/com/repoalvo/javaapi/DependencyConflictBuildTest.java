@@ -23,7 +23,7 @@ public class DependencyConflictBuildTest {
         assertTrue(exitCode == 0, "Maven build failed");
 
         // Check for duplicate dependency warnings in output
-        boolean hasDuplicates = output.contains("duplicate") || output.contains("conflict");
+        boolean hasDuplicates = output.toLowerCase().contains("duplicate") || output.toLowerCase().contains("conflict");
         assertTrue(!hasDuplicates, "Dependency tree contains duplicates or conflicts:\n" + output);
     }
 }

@@ -11,6 +11,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
@@ -69,7 +73,7 @@ class UserControllerUnitTest {
                 () -> userController.updateUserStatus(userId, payload));
 
         assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Usuário já possui o status"));
+        assertEquals("Usuário já possui o status '" + status + "'", ex.getReason());
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
 
@@ -90,7 +94,7 @@ class UserControllerUnitTest {
                 () -> userController.updateUserStatus(userId, payload));
 
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Administradores não podem ser desativados"));
+        assertEquals("Administradores não podem ser desativados", ex.getReason());
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
 
@@ -108,7 +112,7 @@ class UserControllerUnitTest {
                 () -> userController.updateUserStatus(userId, payload));
 
         assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Usuário não encontrado"));
+        assertEquals("Usuário não encontrado", ex.getReason());
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
 
@@ -130,7 +134,7 @@ class UserControllerUnitTest {
                 () -> userController.updateUserStatus(userId, payload));
 
         assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Usuário não encontrado"));
+        assertEquals("Usuário não encontrado", ex.getReason());
         verify(userService).updateStatus(userId, newStatus);
     }
 
@@ -151,7 +155,7 @@ class UserControllerUnitTest {
         });
 
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Status não pode ser nulo"));
+        assertEquals("Status não pode ser nulo", ex.getReason());
         verify(userService, never()).getById(anyInt());
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
@@ -180,7 +184,7 @@ class UserControllerUnitTest {
                 userController.updateUserStatus(userId, payload);
             });
             assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
-            assertTrue(ex.getReason().contains("Usuário já possui o status"));
+            assertEquals("Usuário já possui o status '" + newStatus + "'", ex.getReason());
             verify(userService, never()).updateStatus(anyInt(), anyString());
         } else {
             UserResponse updatedUser = new UserResponse(userId, "User Seven", "user7@example.com", newStatus, "USER");
@@ -215,7 +219,7 @@ class UserControllerUnitTest {
         });
 
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Status inválido"));
+        assertEquals("Status inválido", ex.getReason());
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
 
@@ -280,7 +284,7 @@ class UserControllerUnitTest {
         });
 
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Status não pode ser nulo"));
+        assertEquals("Status não pode ser nulo", ex.getReason());
         verify(userService, never()).getById(anyInt());
         verify(userService, never()).updateStatus(anyInt(), anyString());
     }
@@ -301,9 +305,62 @@ class UserControllerUnitTest {
         });
 
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("Status não pode ser nulo"));
+        assertEquals("Status não pode ser nulo", ex.getReason());
         verify(userService, never()).getById(anyInt());
         verify(userService, never()).updateStatus(anyInt(), anyString());
+    }
+
+    @Test
+    @DisplayName("testUpdateStatus_ConcurrentUpdates_NoRaceCondition")
+    void testUpdateStatus_ConcurrentUpdates_NoRaceCondition() throws InterruptedException {
+        int userId = 13;
+        String initialStatus = "ACTIVE";
+        String newStatus = "INACTIVE";
+
+        UserResponse existingUser = new UserResponse(userId, "Concurrent User", "concurrent@example.com", initialStatus, "USER");
+
+        // Simulate user exists initially
+        when(userService.getById(userId)).thenReturn(Optional.of(existingUser));
+
+        // Simulate updateStatus returns updated user for first call, empty for subsequent calls (simulate user removed)
+        when(userService.updateStatus(eq(userId), eq(newStatus)))
+                .thenReturn(Optional.of(new UserResponse(userId, "Concurrent User", "concurrent@example.com", newStatus, "USER")))
+                .thenReturn(Optional.empty());
+
+        int threadCount = 2;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger notFoundCount = new AtomicInteger(0);
+
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    UserStatusUpdateRequest payload = new UserStatusUpdateRequest(newStatus);
+                    try {
+                        userController.updateUserStatus(userId, payload);
+                        successCount.incrementAndGet();
+                    } catch (ResponseStatusException ex) {
+                        if (ex.getStatusCode() == HttpStatus.NOT_FOUND) {
+                            notFoundCount.incrementAndGet();
+                        } else {
+                            fail("Unexpected exception: " + ex);
+                        }
+                    }
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        latch.await();
+        executor.shutdown();
+
+        // One thread should succeed, the other should get NOT_FOUND due to concurrency simulation
+        assertEquals(1, successCount.get());
+        assertEquals(1, notFoundCount.get());
+
+        verify(userService, times(threadCount)).updateStatus(userId, newStatus);
     }
 
     // Helper method to simulate allowed statuses validation

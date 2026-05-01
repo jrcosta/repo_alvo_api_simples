@@ -333,4 +333,57 @@ class UserServiceUnitTest {
         RuntimeException ex = assertThrows(RuntimeException.class, () -> userService.update(nonExistentUserId, payload2));
         assertTrue(ex.getMessage().contains("User not found"));
     }
+
+    // New tests added to cover coexistence and consistency of createUser and create methods
+
+    @Test
+    void testCreateUserAndCreate_CoexistenceAndConsistency() {
+        // Create user via createUser
+        UserResponse user1 = userService.createUser("UserOne", "userone@example.com", "ACTIVE", "USER");
+        assertNotNull(user1);
+        assertEquals("UserOne", user1.name());
+        assertEquals("userone@example.com", user1.email());
+        assertEquals("ACTIVE", user1.status());
+        assertEquals("USER", user1.role());
+
+        // Create user via create with UserCreateRequest
+        UserCreateRequest req = new UserCreateRequest("UserTwo", "usertwo@example.com", "ADMIN", "+55 11 12345-6789");
+        UserResponse user2 = userService.create(req);
+        assertNotNull(user2);
+        assertEquals("UserTwo", user2.name());
+        assertEquals("usertwo@example.com", user2.email());
+        assertEquals("ACTIVE", user2.status()); // create method sets status to ACTIVE
+        assertEquals("ADMIN", user2.role());
+        assertEquals("+55 11 12345-6789", user2.phoneNumber());
+
+        // Both users should be present in the list
+        List<UserResponse> allUsers = userService.listAllUsers();
+        assertTrue(allUsers.contains(user1));
+        assertTrue(allUsers.contains(user2));
+
+        // IDs should be unique
+        assertNotEquals(user1.id(), user2.id());
+    }
+
+    @Test
+    void testCreateUserAndCreate_UpdateConsistency() {
+        // Create user via createUser
+        UserResponse user = userService.createUser("InitialName", "initial@example.com", "ACTIVE", "USER");
+
+        // Update user via update with UserCreateRequest
+        UserCreateRequest updateReq = new UserCreateRequest("UpdatedName", "updated@example.com", "ADMIN", "+55 11 99999-9999");
+        UserResponse updatedUser = userService.update(user.id(), updateReq);
+
+        assertNotNull(updatedUser);
+        assertEquals(user.id(), updatedUser.id());
+        assertEquals("UpdatedName", updatedUser.name());
+        assertEquals("updated@example.com", updatedUser.email());
+        assertEquals("ADMIN", updatedUser.role());
+        assertEquals("+55 11 99999-9999", updatedUser.phoneNumber());
+
+        // The user in the list should be updated
+        Optional<UserResponse> found = userService.getById(user.id());
+        assertTrue(found.isPresent());
+        assertEquals(updatedUser, found.get());
+    }
 }

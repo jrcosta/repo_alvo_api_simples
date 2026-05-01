@@ -262,8 +262,8 @@ class UserControllerStatusIntegrationTest {
         assertTrue(userOpt.isPresent(), "Usuário com ID 2 deve existir");
         User user = userOpt.get();
         assertEquals(2, user.getId());
-        assertNotNull(user.status());
-        assertFalse(user.status().isEmpty());
+        assertNotNull(user.status(), "Status do usuário não deve ser nulo");
+        assertFalse(user.status().isEmpty(), "Status do usuário não deve ser vazio");
     }
 
     @Test
@@ -310,7 +310,8 @@ class UserControllerStatusIntegrationTest {
             assertTrue(finalStatus.equals("ACTIVE") || finalStatus.equals("INACTIVE"),
                     "Usuário 2 não encontrado ou status inválido: " + finalStatus);
         });
-        assertTrue(error.getMessage().contains("Usuário 2 não encontrado ou status inválido"));
+        assertTrue(error.getMessage().contains("Usuário 2 não encontrado ou status inválido"),
+                "Mensagem de erro deve conter informação clara sobre ausência ou status inválido");
     }
 
     @Test
@@ -402,6 +403,7 @@ class UserControllerStatusIntegrationTest {
         AssertionError error = assertThrows(AssertionError.class, () -> {
             assertNotNull(status, "Status do usuário não pode ser nulo");
         });
-        assertTrue(error.getMessage().contains("não pode ser nulo"));
+        assertTrue(error.getMessage().contains("não pode ser nulo"),
+                "Mensagem de erro deve indicar claramente que status não pode ser nulo");
     }
 }

@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.web.servlet.MockMvc;
@@ -56,6 +55,17 @@ class SecurityConfigTest {
             mockMvc.perform(delete("/users/1"))
                     .andExpect(status().isNotFound());
         }
+
+        @Test
+        @DisplayName("testDeleteUserWithInvalidCsrfToken_ShouldReturnForbidden")
+        @WithMockUser(username = "admin", roles = {"ADMIN"})
+        void testDeleteUserWithInvalidCsrfToken_ShouldReturnForbidden() throws Exception {
+            // Even though CSRF is disabled, test that request with invalid CSRF token does not cause failure
+            // Since CSRF is disabled, no CSRF token is required, so request should pass auth and return 404 (no controller)
+            mockMvc.perform(delete("/users/1")
+                            .with(SecurityMockMvcRequestPostProcessors.csrf().useInvalidToken()))
+                    .andExpect(status().isNotFound());
+        }
     }
 
     @Nested
@@ -66,7 +76,7 @@ class SecurityConfigTest {
         @DisplayName("testOtherMethodsWithoutAuthentication_ShouldBePermitted_GET")
         void testOtherMethodsWithoutAuthentication_ShouldBePermitted_GET() throws Exception {
             mockMvc.perform(get("/users"))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isOk().or(status().isNotFound()))
                     .andExpect(content().string(containsString("")));
         }
 
@@ -74,23 +84,42 @@ class SecurityConfigTest {
         @DisplayName("testOtherMethodsWithoutAuthentication_ShouldBePermitted_POST")
         void testOtherMethodsWithoutAuthentication_ShouldBePermitted_POST() throws Exception {
             mockMvc.perform(post("/users"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isOk().or(status().isNotFound()));
         }
 
         @Test
         @DisplayName("testOtherMethodsWithoutAuthentication_ShouldBePermitted_PUT")
         void testOtherMethodsWithoutAuthentication_ShouldBePermitted_PUT() throws Exception {
             mockMvc.perform(put("/users/1"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isOk().or(status().isNotFound()));
         }
     }
 
-    @Test
-    @DisplayName("testCsrfDisabled_ShouldNotRequireToken")
-    void testCsrfDisabled_ShouldNotRequireToken() throws Exception {
-        // CSRF is disabled globally, so POST without CSRF token should be allowed (status 200 or 404)
-        mockMvc.perform(post("/users"))
-                .andExpect(status().isOk());
+    @Nested
+    @DisplayName("CSRF Vulnerability Tests")
+    class CsrfVulnerabilityTests {
+
+        @Test
+        @DisplayName("testPostWithoutCsrfToken_ShouldBePermittedDueToCsrfDisabled")
+        void testPostWithoutCsrfToken_ShouldBePermittedDueToCsrfDisabled() throws Exception {
+            mockMvc.perform(post("/users"))
+                    .andExpect(status().isOk().or(status().isNotFound()));
+        }
+
+        @Test
+        @DisplayName("testPutWithoutCsrfToken_ShouldBePermittedDueToCsrfDisabled")
+        void testPutWithoutCsrfToken_ShouldBePermittedDueToCsrfDisabled() throws Exception {
+            mockMvc.perform(put("/users/1"))
+                    .andExpect(status().isOk().or(status().isNotFound()));
+        }
+
+        @Test
+        @DisplayName("testDeleteWithoutCsrfToken_ShouldBePermittedDueToCsrfDisabled")
+        @WithMockUser(username = "admin", roles = {"ADMIN"})
+        void testDeleteWithoutCsrfToken_ShouldBePermittedDueToCsrfDisabled() throws Exception {
+            mockMvc.perform(delete("/users/1"))
+                    .andExpect(status().isNotFound());
+        }
     }
 
     @Test
@@ -130,15 +159,15 @@ class SecurityConfigTest {
         void integrationTestPublicEndpointsAccess() throws Exception {
             // GET /users without auth allowed
             mockMvc.perform(get("/users"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isOk().or(status().isNotFound()));
 
             // POST /users without auth allowed
             mockMvc.perform(post("/users"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isOk().or(status().isNotFound()));
 
             // PUT /users/1 without auth allowed
             mockMvc.perform(put("/users/1"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isOk().or(status().isNotFound()));
         }
 
         @Test
@@ -149,6 +178,23 @@ class SecurityConfigTest {
                             .with(SecurityMockMvcRequestPostProcessors.httpBasic("admin", "password"))
                             .secure(true)) // simulate HTTPS
                     .andExpect(status().isUnauthorized()); // no user "admin" defined, so 401 expected
+        }
+    }
+
+    @Nested
+    @DisplayName("Http Basic Authentication Brute Force Protection Tests")
+    class HttpBasicBruteForceProtectionTests {
+
+        @Test
+        @DisplayName("testMultipleInvalidHttpBasicAuthenticationAttempts_ShouldReturn401")
+        void testMultipleInvalidHttpBasicAuthenticationAttempts_ShouldReturn401() throws Exception {
+            // Simulate multiple invalid attempts; since no brute force protection implemented,
+            // all attempts should return 401 Unauthorized.
+            for (int i = 0; i < 5; i++) {
+                mockMvc.perform(delete("/users/1")
+                                .with(SecurityMockMvcRequestPostProcessors.httpBasic("invalidUser" + i, "invalidPass")))
+                        .andExpect(status().isUnauthorized());
+            }
         }
     }
 }

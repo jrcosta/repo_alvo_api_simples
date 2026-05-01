@@ -33,7 +33,6 @@ def test_delete_user_internal_exception_does_not_corrupt_user_list(user_service:
 
 
 def test_update_user_with_empty_name_raises_validation_error(user_service: UserService):
-    user_id = 1
     with pytest.raises(ValidationError) as exc_info:
         UserUpdate(name="")
     errors = exc_info.value.errors()
@@ -173,7 +172,7 @@ def test_update_user_validation_error_messages_are_clear_and_standardized(user_s
     with pytest.raises(ValidationError) as exc_email:
         UserUpdate(email="invalid-email")
     errors_email = exc_email.value.errors()
-    assert any("email" in e.get("loc", []) and "valid email" in e.get("msg", "").lower() for e in errors_email)
+    assert any("email" in e.get("loc", []) and ("valid email" in e.get("msg", "").lower() or "valid email address" in e.get("msg", "").lower()) for e in errors_email)
 
 
 @pytest.mark.parametrize("name_value", ["", None])
