@@ -29,6 +29,21 @@ class UserService {
     this.users.push(newUser);
     return newUser;
   }
+
+  updateUser(id, payload) {
+    const index = this.users.findIndex(u => u.id === id);
+    if (index === -1) return null;
+    if (payload.name !== undefined) this.users[index].name = payload.name;
+    if (payload.email !== undefined) this.users[index].email = payload.email;
+    return this.users[index];
+  }
+
+  deleteUser(id) {
+    const index = this.users.findIndex(u => u.id === id);
+    if (index === -1) return false;
+    this.users.splice(index, 1);
+    return true;
+  }
 }
 
 // Singleton instance
