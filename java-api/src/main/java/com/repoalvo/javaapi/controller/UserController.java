@@ -8,6 +8,7 @@ import com.repoalvo.javaapi.model.UserCreateRequest;
 import com.repoalvo.javaapi.model.UserExistsResponse;
 import com.repoalvo.javaapi.model.UserResponse;
 import com.repoalvo.javaapi.model.UserStatusSummaryResponse;
+import com.repoalvo.javaapi.model.UserStatusUpdateRequest;
 import com.repoalvo.javaapi.model.UserUpdateRequest;
 import com.repoalvo.javaapi.service.ExternalService;
 import com.repoalvo.javaapi.service.UserService;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -158,6 +160,28 @@ public class UserController {
     @GetMapping("/users/{userId}")
     public UserResponse getUser(@PathVariable int userId) {
         return userService.getById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
+    }
+
+    @PatchMapping("/users/{userId}/status")
+    public UserResponse updateUserStatus(
+            @PathVariable int userId,
+            @Valid @RequestBody UserStatusUpdateRequest payload
+    ) {
+        UserResponse user = userService.getById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
+
+        if (user.status().equals(payload.status())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Usuário já possui o status '" + payload.status() + "'");
+        }
+
+        if ("ADMIN".equals(user.role()) && "INACTIVE".equals(payload.status())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Administradores não podem ser desativados");
+        }
+
+        return userService.updateStatus(userId, payload.status())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
     }
 
